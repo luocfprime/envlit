@@ -151,3 +151,124 @@ class TestScriptGenerator:
         assert "QUOTED" in script
         # Dollar sign should be handled (not expanded by Python)
         assert "DOLLAR" in script
+
+
+class TestEscapeShellValue:
+    """Test cases for escape_shell_value function."""
+
+    def test_simple_string(self):
+        """Test escaping simple string without special characters."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("simple_value")
+        assert result == "simple_value"
+
+    def test_string_with_spaces(self):
+        """Test escaping string with spaces."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("value with spaces")
+        assert result == "value with spaces"
+
+    def test_string_with_double_quotes(self):
+        """Test escaping string with double quotes."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value('value with "quotes"')
+        assert result == 'value with \\"quotes\\"'
+
+    def test_string_with_backslash(self):
+        """Test escaping string with backslashes."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("path\\to\\file")
+        assert result == "path\\\\to\\\\file"
+
+    def test_string_with_backticks(self):
+        """Test escaping string with backticks."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("value with `command`")
+        assert result == "value with \\`command\\`"
+
+    def test_string_with_newline(self):
+        """Test escaping string with newlines."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("line1\nline2")
+        assert result == "line1\\nline2"
+
+    def test_preserve_simple_variable(self):
+        """Test that simple $VAR references are preserved."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("${HOME}/projects")
+        assert result == "${HOME}/projects"
+
+        result = escape_shell_value("$HOME/projects")
+        assert result == "$HOME/projects"
+
+    def test_preserve_variable_with_default(self):
+        """Test that ${VAR:-default} syntax is preserved."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("${VAR:-default_value}")
+        assert result == "${VAR:-default_value}"
+
+    def test_preserve_variable_with_substring(self):
+        """Test that ${VAR:0:5} substring syntax is preserved."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("${PATH:0:10}")
+        assert result == "${PATH:0:10}"
+
+    def test_preserve_variable_with_substitution(self):
+        """Test that ${VAR/old/new} substitution syntax is preserved."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("${PATH/old/new}")
+        assert result == "${PATH/old/new}"
+
+    def test_mixed_variables_and_special_chars(self):
+        """Test string with both variables and special characters."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value('${HOME}/path with "quotes"')
+        assert result == '${HOME}/path with \\"quotes\\"'
+
+    def test_multiple_variables(self):
+        """Test string with multiple variable references."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("${HOME}/projects/${PROJECT_NAME}/src")
+        assert result == "${HOME}/projects/${PROJECT_NAME}/src"
+
+    def test_dollar_sign_not_part_of_variable(self):
+        """Test that $ not part of a variable is escaped."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("price is $100")
+        assert result == "price is \\$100"
+
+    def test_complex_parameter_expansion(self):
+        """Test complex parameter expansion patterns."""
+        from envlit.script_generator import escape_shell_value
+
+        # Default value with quotes - quotes inside ${} are preserved as-is
+        result = escape_shell_value('${VAR:-"default with quotes"}')
+        assert result == '${VAR:-"default with quotes"}'
+
+        # Alternative value
+        result = escape_shell_value("${VAR:+alternative}")
+        assert result == "${VAR:+alternative}"
+
+        # Length
+        result = escape_shell_value("${#VAR}")
+        assert result == "${#VAR}"
+
+    def test_combined_escaping(self):
+        """Test string with multiple types of special characters."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value('${HOME}/path\\with "quotes" and `backticks` and $100')
+        assert result == '${HOME}/path\\\\with \\"quotes\\" and \\`backticks\\` and \\$100'

@@ -77,7 +77,7 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
             lines.extend(script_lines)
         else:
             # Simple string value - preserve ${VAR} references for shell expansion
-            escaped_value = _escape_shell_value(str(var_value))
+            escaped_value = escape_shell_value(str(var_value))
             lines.append(f'export {var_name}="{escaped_value}"')
     lines.append("")
 
@@ -142,7 +142,7 @@ def generate_unload_script(config: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _escape_shell_value(value: str) -> str:
+def escape_shell_value(value: str) -> str:
     r"""
     Escape a value for use in a shell script, preserving ${VAR} references.
 
@@ -173,9 +173,10 @@ def _escape_shell_value(value: str) -> str:
     # Comprehensive pattern to match all variable forms in one pass
     # 1. Simple $var
     # 2. ${var} with optional modifiers (e.g., ${var:-default}, ${var:0:5}, ${var/old/new})
+    # 3. ${#var} (length operator) and other special operators
     VAR_PATTERN = re.compile(
         r"\$([a-zA-Z_][a-zA-Z0-9_]*)"  # Simple $var
-        r"|\${([a-zA-Z_][a-zA-Z0-9_]*)(?::?[^}]*)?}"  # ${var} with modifiers
+        r"|\${#?([a-zA-Z_][a-zA-Z0-9_]*)(?::?[^}]*)?}"  # ${var} or ${#var} with modifiers
     )
     temp_value = VAR_PATTERN.sub(replace_var, value)
 
@@ -198,7 +199,7 @@ def _generate_path_operation_script(var_name: str, operations: list[dict[str, st
     r"""
     Generate shell script lines to apply PATH-like operations to a variable.
 
-    Uses the tested apply_path_operations() function from path_ops.py to compute
+    Uses the apply_path_operations() function from path_ops.py to compute
     the final value at generation time, then generates a single export command.
 
     Args:
@@ -215,6 +216,6 @@ def _generate_path_operation_script(var_name: str, operations: list[dict[str, st
     result = apply_path_operations(current_value, operations)
 
     # Escape the result for shell and generate single export
-    escaped_result = _escape_shell_value(result)
+    escaped_result = escape_shell_value(result)
 
     return [f'export {var_name}="{escaped_result}"']
