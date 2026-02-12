@@ -138,9 +138,9 @@ class TestInternalTracking:
         result = track_restore()
 
         # Should generate commands to restore
-        assert 'export VAR1="original1"' in result
+        assert "export VAR1=original1" in result
         assert "unset VAR2" in result
-        assert 'export VAR3=""' in result
+        assert "export VAR3=''" in result
         assert f"unset {state_var}" in result  # Clear state after restore
 
     def test_track_restore_no_state(self, monkeypatch):

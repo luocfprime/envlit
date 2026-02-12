@@ -1,10 +1,11 @@
 """
 Internal tracking functionality for envlit.
-These functions are called by the generated shell scripts via the _envlit_internal_track CLI command.
+These functions are called by the generated shell scripts via the envlit-internal-track CLI command.
 """
 
 import json
 import os
+import shlex
 
 from envlit.constants import SNAPSHOT_VAR_NAME, get_state_var_name
 from envlit.state import StateManager
@@ -15,7 +16,8 @@ def track_begin() -> str:
     Capture the current environment state (Snapshot A) and output as JSON.
 
     This is called at the beginning of a load script before any changes are made.
-    The output is meant to be captured by the shell: __ENVLIT_SNAPSHOT_A=$(envlit-internal-track begin)
+    The output is captured by the shell:
+        __ENVLIT_SNAPSHOT_A=$(envlit-internal-track begin)
 
     Returns:
         JSON string of current environment variables.
@@ -27,94 +29,86 @@ def track_begin() -> str:
 
 def track_end() -> str:
     """
-    Capture the ending state (Snapshot B), compare with Snapshot A from environment,
+    Capture the ending state (Snapshot B), compare with Snapshot A,
     and update the __ENVLIT_STATE variable.
-
-    This implements the "Compare-and-Swap" algorithm from the design spec.
-    Reads snapshot A from the __ENVLIT_SNAPSHOT_A environment variable.
-
-    Returns:
-        Shell commands to export the updated __ENVLIT_STATE.
     """
-    # Read Snapshot A from environment
+    # Read Snapshot A (Start state)
     snapshot_a_json = os.environ.get(SNAPSHOT_VAR_NAME, "{}")
-    snapshot_a = json.loads(snapshot_a_json)
+    try:
+        snapshot_a = json.loads(snapshot_a_json)
+    except json.JSONDecodeError:
+        # Fallback if the snapshot is corrupted
+        snapshot_a = {}
 
-    # Get current state (Snapshot B)
+    # Read Snapshot B (Current state)
     snapshot_b = dict(os.environ)
 
-    # Load existing state
-    state_var = get_state_var_name()
+    # Identify keys
+    keys_a = set(snapshot_a.keys())
+    keys_b = set(snapshot_b.keys())
+
+    # Filter out the snapshot variable itself to avoid self-reference loops
+    keys_a.discard(SNAPSHOT_VAR_NAME)
+    keys_b.discard(SNAPSHOT_VAR_NAME)
+
+    # 1. Variables added or removed (Symmetric Difference)
+    changed_vars = {k: snapshot_b.get(k) for k in keys_a ^ keys_b}
+
+    # 2. Variables present in both but with different values
+    common_keys = keys_a & keys_b
+    for k in common_keys:
+        if snapshot_a[k] != snapshot_b[k]:
+            changed_vars[k] = snapshot_b[k]
+
+    # Apply Compare-and-Swap
     state_manager = StateManager()
 
-    # Find all changed variables (comparing A to B)
-    changed_vars = {}
-    all_vars = set(snapshot_a.keys()) | set(snapshot_b.keys())
+    # We only need to update the state manager if there are changes
+    if changed_vars:
+        for var_name, target_val in changed_vars.items():
+            # actual_val is what it was at the start (Snapshot A)
+            actual_val = snapshot_a.get(var_name)
+            state_manager.update_variable(var_name, actual_val, target_val)
 
-    for var_name in all_vars:
-        # Skip the temporary snapshot variable itself
-        if var_name == SNAPSHOT_VAR_NAME:
-            continue
-
-        val_a = snapshot_a.get(var_name)
-        val_b = snapshot_b.get(var_name)
-
-        if val_a != val_b:
-            changed_vars[var_name] = val_b
-
-    # Apply the Compare-and-Swap algorithm for each changed variable
-    for var_name, target_val in changed_vars.items():
-        actual_val = snapshot_a.get(var_name)  # Value at beginning
-        state_manager.update_variable(var_name, actual_val, target_val)
-
-    # Generate shell command to export the updated state
+    # Generate shell command
+    state_var = get_state_var_name()
     updated_state = state_manager.get_state()
     state_json = json.dumps(updated_state)
-    # Escape single quotes for shell
-    state_json_escaped = state_json.replace("'", "'\\''")
 
-    return f"export {state_var}='{state_json_escaped}'"
+    # Use shlex for safe quoting (handles single quotes, spaces, etc.)
+    return f"export {state_var}={shlex.quote(state_json)}"
 
 
 def track_restore() -> str:
     """
     Restore environment variables to their original values from __ENVLIT_STATE.
-
-    This is called during unload to restore the environment to its pre-envlit state.
-
-    Returns:
-        Shell commands to restore variables and clear state.
     """
     state_var = get_state_var_name()
-    state_manager = StateManager()
 
-    # Check if state exists
-    if not os.environ.get(state_var):
+    # Check if state exists in environment
+    if state_var not in os.environ:
         return "# No envlit state found to restore"
 
-    # Get all tracked variables
-    state = state_manager.get_state()
+    state_manager = StateManager()
+    tracked_vars = state_manager.get_tracked_variables()
 
-    if not state:
+    if not tracked_vars:
         return f"unset {state_var}"
 
-    # Generate restore commands
-    commands = []
-    commands.append("# Restoring environment to original state")
+    commands = ["# Restoring environment to original state"]
 
-    for var_name in state_manager.get_tracked_variables():
+    for var_name in tracked_vars:
         original = state_manager.get_original_value(var_name)
 
         if original is None:
-            # Was unset originally, unset it again
+            # Variable was originally unset, so we unset it now
             commands.append(f"unset {var_name}")
         else:
-            # Restore original value
-            # Escape for shell
-            escaped = original.replace("\\", "\\\\").replace('"', '\\"')
-            commands.append(f'export {var_name}="{escaped}"')
+            # Variable had a value, restore it safely
+            # shlex.quote ensures that $VAR, `cmd`, and spaces are treated as literals
+            commands.append(f"export {var_name}={shlex.quote(original)}")
 
-    # Clear the state
+    # Clear the internal state variable last
     commands.append(f"unset {state_var}")
 
     return "\n".join(commands)

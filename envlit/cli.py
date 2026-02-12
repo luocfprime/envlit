@@ -3,6 +3,8 @@ Command-line interface for envlit.
 Provides shell script generation commands.
 """
 
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -122,10 +124,14 @@ def load(profile: str | None, config: str | None, **kwargs):  # noqa: C901
     """
     Generate shell script to load environment configuration.
 
-    This command outputs shell commands that should be eval'd:
-        eval "$(envlit load)"
-        eval "$(envlit load dev --cuda 1)"
-        eval "$(envlit load --config path/to/config.yaml)"
+    For daily use with aliases (recommended):
+        el                    # Load default profile
+        el dev --cuda 1       # Load dev profile with CUDA device 1
+
+    Direct usage (after running 'source <(envlit init)'):
+        source <(envlit load)
+        source <(envlit load dev --cuda 1)
+        source <(envlit load --config path/to/config.yaml)
 
     Dynamic flags from the config file are automatically added as options.
     """
@@ -190,8 +196,11 @@ def unload(profile: str | None, config: str | None):
     """
     Generate shell script to unload environment configuration.
 
-    This command outputs shell commands that should be eval'd:
-        eval "$(envlit unload)"
+    For daily use with aliases (recommended):
+        eul                   # Unload current environment
+
+    Direct usage:
+        source <(envlit unload)
     """
     try:
         # Find config file (needed for hooks)
@@ -230,15 +239,14 @@ def init(shell: str, alias_load: str, alias_unload: str):
     """
     Generate shell initialization code for envlit.
 
-    Add this to your .bashrc or .zshrc:
-        eval "$(envlit init)"
+    Add this to your .bashrc or .zshrc (recommended):
+        source <(envlit init)
 
     With custom aliases:
-        eval "$(envlit init --alias-load el --alias-unload eul)"
+        source <(envlit init --alias-load myload --alias-unload myunload)
 
-    The generated code creates shell functions that wrap envlit commands with eval.
+    The generated code creates shell functions that wrap envlit commands.
     """
-    import os
 
     # Auto-detect shell if needed
     if shell == "auto":
@@ -261,7 +269,7 @@ def init(shell: str, alias_load: str, alias_unload: str):
     # Function for load
     lines.extend([
         f"{alias_load}() {{",
-        '    eval "$(envlit load "$@")"',
+        '    source <(envlit load "$@")',
         "}",
         "",
     ])
@@ -269,7 +277,7 @@ def init(shell: str, alias_load: str, alias_unload: str):
     # Function for unload
     lines.extend([
         f"{alias_unload}() {{",
-        '    eval "$(envlit unload "$@")"',
+        '   source <(envlit unload "$@")',
         "}",
     ])
 
@@ -289,8 +297,6 @@ def doctor(shell: str):
 
     Verifies that envlit is properly set up in your shell.
     """
-    import os
-    import shutil
 
     click.echo("🔍 envlit Doctor - Checking Installation\n")
 
@@ -326,7 +332,7 @@ def doctor(shell: str):
         click.echo("⚠ No .envlit directory in current directory")
 
     click.echo("\n💡 To add envlit to your shell, add this to your .bashrc or .zshrc:")
-    click.echo('    eval "$(envlit init)"')
+    click.echo("    source <(envlit init)")
 
 
 # Separate CLI for internal tracking (not part of main envlit CLI)
@@ -336,7 +342,7 @@ def internal_track_cli(phase: str):
     """
     Internal command for state tracking (not for direct user use).
 
-    This is called by generated shell scripts to manage state.
+    Called by generated shell scripts as 'envlit-internal-track <phase>'.
     """
     from envlit.internal import track_begin, track_end, track_restore
 
