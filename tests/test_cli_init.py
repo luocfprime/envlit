@@ -30,9 +30,14 @@ def test_init_default(runner, monkeypatch):
 
     # Check for default function names
     assert "el() {" in output
-    assert 'source <(envlit load "$@")' in output
+    assert "local tmp_script" in output
+    assert "mktemp" in output
+    assert 'envlit load "$@"' in output
+    assert 'source "$tmp_script"' in output
+    assert 'rm -f "$tmp_script"' in output
+
     assert "eul() {" in output
-    assert 'source <(envlit unload "$@")' in output
+    assert 'envlit unload "$@"' in output
 
 
 def test_init_custom_aliases(runner):
@@ -127,3 +132,36 @@ def test_init_functions_pass_arguments(runner):
     # Both functions should pass arguments with "$@"
     assert '"$@"' in output
     assert output.count('"$@"') == 2  # Once for load, once for unload
+
+
+def test_init_uses_temp_files(runner):
+    """Test that generated functions use temporary files for better compatibility."""
+    result = runner.invoke(cli, ["init"])
+
+    assert result.exit_code == 0
+    output = result.output
+
+    # Check for temp file usage pattern
+    assert "local tmp_script" in output
+    assert "mktemp" in output
+    assert 'source "$tmp_script"' in output
+    assert 'rm -f "$tmp_script"' in output
+
+    # Should have two temp file blocks (load and unload)
+    assert output.count("local tmp_script") == 2
+    assert output.count("mktemp") == 2
+    assert output.count('rm -f "$tmp_script"') == 2
+
+
+def test_init_includes_error_handling(runner):
+    """Test that generated functions include error handling."""
+    result = runner.invoke(cli, ["init"])
+
+    assert result.exit_code == 0
+    output = result.output
+
+    # Check for if-then-else error handling
+    assert "if envlit load" in output
+    assert "if envlit unload" in output
+    assert "else" in output
+    assert "Error: Failed to generate" in output

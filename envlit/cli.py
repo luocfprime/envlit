@@ -10,7 +10,9 @@ from pathlib import Path
 
 import click
 
+from envlit.__about__ import __version__
 from envlit.config import load_config
+from envlit.constants import get_hash_suffix
 from envlit.script_generator import generate_load_script, generate_unload_script
 
 
@@ -53,6 +55,7 @@ def find_config_file(profile: str | None = None, search_dir: Path | None = None)
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(version=__version__, prog_name="envlit")
 def cli():
     """envlit: Environment Orchestration Engine"""
     pass
@@ -240,7 +243,8 @@ def init(shell: str, alias_load: str, alias_unload: str):
     Generate shell initialization code for envlit.
 
     Add this to your .bashrc or .zshrc (recommended):
-        source <(envlit init)
+        zshrc: source <(envlit init --shell zsh)
+        bashrc: eval "$(envlit init --shell bash)"
 
     With custom aliases:
         source <(envlit init --alias-load myload --alias-unload myunload)
@@ -269,7 +273,16 @@ def init(shell: str, alias_load: str, alias_unload: str):
     # Function for load
     lines.extend([
         f"{alias_load}() {{",
-        '    source <(envlit load "$@")',
+        "    local tmp_script",
+        f'    tmp_script=$(mktemp "${{TMPDIR:-/tmp}}/envlit.{get_hash_suffix()}")',
+        "",
+        '    if envlit load "$@" > "$tmp_script"; then',
+        '        source "$tmp_script"',
+        "    else",
+        '        echo "Error: Failed to generate envlit environment."',
+        "    fi",
+        "",
+        '    rm -f "$tmp_script"',
         "}",
         "",
     ])
@@ -277,8 +290,18 @@ def init(shell: str, alias_load: str, alias_unload: str):
     # Function for unload
     lines.extend([
         f"{alias_unload}() {{",
-        '   source <(envlit unload "$@")',
+        "    local tmp_script",
+        f'    tmp_script=$(mktemp "${{TMPDIR:-/tmp}}/envlit.{get_hash_suffix()}")',
+        "",
+        '    if envlit unload "$@" > "$tmp_script"; then',
+        '        source "$tmp_script"',
+        "    else",
+        '        echo "Error: Failed to generate envlit unload script."',
+        "    fi",
+        "",
+        '    rm -f "$tmp_script"',
         "}",
+        "",
     ])
 
     click.echo("\n".join(lines))
