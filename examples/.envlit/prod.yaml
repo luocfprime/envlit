@@ -1,0 +1,32 @@
+# envlit/prod.yaml - Production environment configuration
+
+env:
+  PROJECT_MODE: "Production"
+  DEBUG: "false"
+  LOG_LEVEL: "WARNING"
+
+  # Production-specific paths
+  PATH:
+    - op: prepend
+      value: "/opt/production/bin"
+
+  # Production API keys (these would normally be loaded from secure storage)
+  API_ENDPOINT: "https://api.production.example.com"
+
+hooks:
+  pre_load:
+    - name: "Security check"
+      script: |
+        echo "🔒 Loading production environment..."
+        echo "⚠️  WARNING: You are entering production mode"
+
+  post_load:
+    - name: "Verify config"
+      script: |
+        echo "✅ Production environment active"
+        echo "   Endpoint: $API_ENDPOINT"
+        echo "   Log Level: $LOG_LEVEL"
+
+  post_unload:
+    - name: "Exit production"
+      script: "echo '🔓 Exited production mode'"

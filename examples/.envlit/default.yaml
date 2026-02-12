@@ -1,0 +1,27 @@
+# envlit/default.yaml - Default environment configuration example
+
+extends: ./base.yaml
+
+# Simple environment variables
+env:
+  PROJECT_NAME: "my_project"
+  DEBUG: "true"
+  LOG_LEVEL: "INFO"
+
+# Hooks
+hooks:
+  pre_load:
+    - name: "Greeting"
+      script: "echo '🚀 Loading default environment...'"
+
+  post_load:
+    - name: "Status"
+      script: "echo '✅ Environment loaded successfully!'"
+
+  pre_unload:
+    - name: "Cleanup message"
+      script: "echo '🔄 Unloading environment...'"
+
+  post_unload:
+    - name: "Goodbye"
+      script: "echo '👋 Environment restored!'"

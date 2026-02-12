@@ -1,0 +1,66 @@
+# envlit/dev.yaml - Development environment configuration
+
+extends: ./base.yaml
+
+# Smart flags for dynamic configuration
+flags:
+  cuda:
+    flag: ["--cuda", "-g"]
+    default: "0"
+    target: "CUDA_VISIBLE_DEVICES"
+
+  backend:
+    flag: ["--backend", "-b"]
+    default: "c"
+    target: "ML_COMPUTE_BACKEND"
+    map:
+      c: "CPU"
+      g: "GPU"
+      t: "TPU"
+
+# Environment variables
+env:
+  PROJECT_MODE: "Development"
+  DEBUG: "true"
+  LOG_LEVEL: "DEBUG"
+
+  # Path operations example
+  PATH:
+    - op: prepend
+      value: "./bin"
+    - op: prepend
+      value: "./scripts"
+    - op: remove
+      value: "/usr/local/old-tools"
+
+  PYTHONPATH:
+    - op: prepend
+      value: "./src"
+    - op: prepend
+      value: "./lib"
+
+
+# Lifecycle hooks
+hooks:
+  pre_load:
+    - name: "Check dependencies"
+      script: |
+        if ! command -v python3 &> /dev/null; then
+          echo "⚠️  Warning: python3 not found"
+        fi
+
+  post_load:
+    - name: "Show configuration"
+      script: |
+        echo "🔧 Development environment loaded"
+        echo "   MODE: $PROJECT_MODE"
+        echo "   CUDA: $CUDA_VISIBLE_DEVICES"
+        echo "   Backend: $ML_COMPUTE_BACKEND"
+
+  pre_unload:
+    - name: "Save state"
+      script: "echo '💾 Saving development state...'"
+
+  post_unload:
+    - name: "Cleanup"
+      script: "echo '✨ Development environment unloaded'"

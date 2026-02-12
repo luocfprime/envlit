@@ -1,0 +1,4 @@
+hooks:
+  pre_load:
+    - name: "Hello from base"
+      script: "echo 'Hello, this is pre-load hook from common base.'"
