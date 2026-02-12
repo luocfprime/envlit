@@ -118,21 +118,3 @@ def track_restore() -> str:
     commands.append(f"unset {state_var}")
 
     return "\n".join(commands)
-
-
-def print_snapshot_for_shell() -> None:
-    """
-    Print the current environment as a shell-sourceable format.
-    This is used by the _envlit_internal_track begin command to capture state.
-    """
-    snapshot = track_begin()
-    # Encode as JSON for easy parsing
-    print(json.dumps(snapshot))
-
-
-def process_track_restore_from_shell() -> None:
-    """
-    Process track_restore from shell, printing commands to stdout.
-    """
-    result = track_restore()
-    print(result)

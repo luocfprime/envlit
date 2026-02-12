@@ -217,8 +217,116 @@ def unload(profile: str | None, config: str | None):
         sys.exit(1)
 
 
-if __name__ == "__main__":
-    cli()
+@cli.command()
+@click.option(
+    "--shell",
+    type=click.Choice(["bash", "zsh", "auto"]),
+    default="auto",
+    help="Target shell (auto-detect if not specified)",
+)
+@click.option("--alias-load", default="el", help="Alias for 'envlit load' (default: el)")
+@click.option("--alias-unload", default="eul", help="Alias for 'envlit unload' (default: eul)")
+def init(shell: str, alias_load: str, alias_unload: str):
+    """
+    Generate shell initialization code for envlit.
+
+    Add this to your .bashrc or .zshrc:
+        eval "$(envlit init)"
+
+    With custom aliases:
+        eval "$(envlit init --alias-load el --alias-unload eul)"
+
+    The generated code creates shell functions that wrap envlit commands with eval.
+    """
+    import os
+
+    # Auto-detect shell if needed
+    if shell == "auto":
+        shell_env = os.environ.get("SHELL", "")
+        if "zsh" in shell_env:
+            shell = "zsh"
+        elif "bash" in shell_env:
+            shell = "bash"
+        else:
+            # Default to bash if can't detect
+            shell = "bash"
+
+    # Generate shell initialization code
+    lines = [
+        "# envlit shell integration",
+        f"# Generated for {shell}",
+        "",
+    ]
+
+    # Function for load
+    lines.extend([
+        f"{alias_load}() {{",
+        '    eval "$(envlit load "$@")"',
+        "}",
+        "",
+    ])
+
+    # Function for unload
+    lines.extend([
+        f"{alias_unload}() {{",
+        '    eval "$(envlit unload "$@")"',
+        "}",
+    ])
+
+    click.echo("\n".join(lines))
+
+
+@cli.command()
+@click.option(
+    "--shell",
+    type=click.Choice(["bash", "zsh", "auto"]),
+    default="auto",
+    help="Target shell type",
+)
+def doctor(shell: str):
+    """
+    Check envlit installation and configuration.
+
+    Verifies that envlit is properly set up in your shell.
+    """
+    import os
+    import shutil
+
+    click.echo("🔍 envlit Doctor - Checking Installation\n")
+
+    # Check if envlit command is available
+    envlit_path = shutil.which("envlit")
+    if envlit_path:
+        click.echo(f"✓ envlit command found: {envlit_path}")
+    else:
+        click.echo("✗ envlit command not found in PATH")
+        return
+
+    # Check shell type
+    if shell == "auto":
+        shell_env = os.environ.get("SHELL", "unknown")
+        click.echo(f"✓ Shell: {shell_env}")
+    else:
+        click.echo(f"✓ Shell: {shell}")
+
+    # Check for config directory
+    envlit_dir = Path.cwd() / ".envlit"
+    if envlit_dir.is_dir():
+        click.echo(f"✓ Config directory found: {envlit_dir}")
+
+        # List config files
+        configs = list(envlit_dir.glob("*.yaml")) + list(envlit_dir.glob("*.yml"))
+        if configs:
+            click.echo(f"  Found {len(configs)} config file(s):")
+            for config in configs:
+                click.echo(f"    - {config.name}")
+        else:
+            click.echo("  ⚠ No config files found (.yaml or .yml)")
+    else:
+        click.echo("⚠ No .envlit directory in current directory")
+
+    click.echo("\n💡 To add envlit to your shell, add this to your .bashrc or .zshrc:")
+    click.echo('    eval "$(envlit init)"')
 
 
 # Separate CLI for internal tracking (not part of main envlit CLI)
