@@ -1,0 +1,27 @@
+* text eol=lf
+*.gif binary
+*.stl binary
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.hdr binary
+
+# Fonts or other binaries
+*.pdf binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.bin binary
+
+# Videos
+*.mp4 binary
+*.mov binary
+*.avi binary
+*.wmv binary
+*.mkv binary
+
+*.npy binary
