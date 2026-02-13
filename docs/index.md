@@ -1,6 +1,6 @@
 # envlit
 
-A minimal CLI tool to organize, load, and switch between your project's environment contexts.
+A simple CLI tool to organize, load, and switch between your project's environment variable contexts.
 
 
 ## Use Cases
@@ -32,12 +32,16 @@ env:
   DEBUG: "true"
 ```
 
-Load and unload environments:
+Load and unload environment variables:
 
 ```bash
-el          # Shell alias for load default profile
-el dev      # Shell alias for load dev profile
-eul         # Shell alias for unload environment
+el                       # Load default profile
+echo $PROJECT_MODE       # Output: Development (variable set by envlit)
+echo $DEBUG              # Output: true (variable set by envlit)
+
+eul                      # Unload environment variables
+echo $PROJECT_MODE       # Output: (empty - variable restored to original state)
+echo $DEBUG              # Output: (empty - variable restored to original state)
 ```
 
 ## Features
