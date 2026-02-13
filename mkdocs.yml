@@ -62,10 +62,10 @@ extra:
       link: https://github.com/luocfprime/envlit
   alternate:
     - name: English
-      link: en
+      link: /envlit/
       lang: en
     - name: Chinese
-      link: zh/
+      link: /envlit/zh/
       lang: zh
   url:
     prefix: '.'
