@@ -102,10 +102,35 @@ echo "After unload: $CUDA_VISIBLE_DEVICES"  # Should be "7" (respects your manua
 
 **Expected:** When you manually change a tracked variable, envlit treats that as the new "original" to restore to. This is the smart part of Compare-and-Swap.
 
+#### Scenario C: Manual Changes Before Unload
+```bash
+# Start fresh (DEBUG not set)
+unset DEBUG
+
+# Load dev profile
+el dev
+echo "After load: $DEBUG"  # Should be "true" (from config)
+
+# Manual change after load
+export DEBUG=false
+echo "After manual change: $DEBUG"  # Is "false"
+
+# Unload directly (without reload)
+eul
+echo "After unload: $DEBUG"  # Should be "false" (preserves your manual change!)
+```
+
+**Expected:** envlit detects manual changes at unload time and preserves them. If you changed `DEBUG` from `true` to `false`, unload will restore it to `false`, not unset it or revert to the config value.
+
+**Why this matters:** This ensures manual tweaks made during development aren't lost when switching contexts.
+
 ### 4. Path Operations
 
 **What to check:**
 ```bash
+# Append /usr/local/old-tools
+export PATH="$PATH:/usr/local/old-tools"
+
 echo "Before: $PATH"
 el dev
 echo "After: $PATH"
@@ -125,8 +150,8 @@ echo "After: $PATH"
 
 **What to check:**
 ```bash
-el dev 2>&1 | grep -E "Hello|Check dependencies|Development environment loaded"
-eul 2>&1 | grep -E "Saving|Cleanup"
+el dev 2>&1 | grep -E "Hello|Checking dependencies|Development environment loaded"
+eul 2>&1 | grep -E "Unloading|restored"
 ```
 
 **Expected behavior:**
@@ -144,7 +169,7 @@ el dev 2>&1
 
 # Look for:
 # "Hello, this is pre-load hook from common base." (from base.yaml)
-# "⚠️  Warning: python3 not found" or similar (from dev.yaml)
+# "🐍 Checking dependencies..." or similar (from dev.yaml)
 ```
 
 **Expected behavior:**
@@ -164,8 +189,10 @@ eul
 ### Case 2: Multiple Profiles
 ```bash
 el dev --cuda 1
+echo $DEBUG $CUDA_VISIBLE_DEVICES  # Should be "true" and "1"
 el prod  # Load different profile without unload
-# What happens? Are variables from dev cleaned up?
+echo $DEBUG $CUDA_VISIBLE_DEVICES  # Should be "false" and "1"
+
 # Current behavior: Variables accumulate (this might be expected or not)
 ```
 
@@ -174,27 +201,48 @@ el prod  # Load different profile without unload
 # Create test config with special chars
 cat > /tmp/test-special.yaml << 'EOF'
 env:
-  TEST_VAR: 'value with "quotes" and $dollar and `backticks`'
+  FOO: 0
+  BAR: $FOO
+  BAZ: ${SOME_ENV_VAR:-default}
+  # Literal dollar with {{DOLLAR}} placeholder
+  PRICE: "Item costs {{DOLLAR}}100"
+  DOLLAR_VAR: "{{DOLLAR}}JAVA_HOME is the variable name"
+  # Mixed: literal dollar and variable expansion
+  MIXED: 'Price: {{DOLLAR}}50, Path: ${HOME}'
+  # Backticks are always literal (auto-escaped)
+  NOTE: "Use `command` syntax"
+  # Quotes work via YAML alternation
+  SINGLE: "Has 'single' quotes"
+  DOUBLE: 'Has "double" quotes'
   TEST_REF: '${HOME}/path'
 EOF
 
-envlit load -c /tmp/test-special.yaml
-echo $TEST_VAR   # Quotes/dollars should be escaped, not interpreted
-echo $TEST_REF   # ${HOME} should be expanded by shell
+el -c /tmp/test-special.yaml
+echo $FOO          # Should be "0"
+echo $BAR          # Should be "0" (expanded from $FOO)
+echo $BAZ          # Should be "default"
+echo $PRICE        # Should be "$100" (literal dollar)
+echo $DOLLAR_VAR   # Should be "$JAVA_HOME is the variable name"
+echo $MIXED        # Should be "Price: $50, Path: /Users/you" ($ literal, ${HOME} expanded)
+echo $NOTE         # Should be "Use `command` syntax" (backticks literal)
+echo $TEST_REF     # ${HOME} should be expanded by shell
 ```
 
 ### Case 4: Unset vs Empty String
 ```bash
 # Variable starts unset
-unset MY_VAR
+unset CUDA_VISIBLE_DEVICES
 
-el dev  # If config sets MY_VAR
-eul     # Should MY_VAR be unset again (not empty string)?
+el dev --cuda 0  # If config sets CUDA_VISIBLE_DEVICES
+eul     # Should CUDA_VISIBLE_DEVICES be unset again (not empty string)?
+
+env | grep CUDA_VISIBLE_DEVICES  # Expected: No output (still unset)
 
 # Variable starts empty
-export MY_VAR=""
-el dev
-eul     # Should MY_VAR be "" (empty), not unset?
+export CUDA_VISIBLE_DEVICES=""
+el dev --cuda 0
+eul     # Should CUDA_VISIBLE_DEVICES be "" (empty), not unset?
+env | grep CUDA_VISIBLE_DEVICES  # Expected: CUDA_VISIBLE_DEVICES="" (still set, but empty)
 ```
 
 **Expected:** envlit distinguishes between `null` (unset) and `""` (empty).

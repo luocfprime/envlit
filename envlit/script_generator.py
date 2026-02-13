@@ -151,23 +151,41 @@ def escape_shell_value(value: str) -> str:
     Since we use double quotes, we need to escape: $ ` " \ and newlines,
     EXCEPT for variable references and their modifiers.
 
+    Supports {{DOLLAR}} placeholder for literal dollar signs.
+
     Args:
         value: The value to escape.
 
     Returns:
         Escaped value safe for use in double quotes.
     """
-    # Strategy: Replace ${VAR} and $VAR patterns with placeholders,
+    # Strategy: Replace {{DOLLAR}} and ${VAR}/$VAR patterns with placeholders,
     # escape everything, then restore the patterns.
 
-    # Step 1: Find and store all variable references
-    var_refs = {}
+    # Step 1: Protect {{DOLLAR}} placeholder
+    placeholders = {
+        "{{DOLLAR}}": "$",  # For literal dollar sign
+    }
+
+    protected = {}
     counter = [0]
+    temp_value = value
+
+    for placeholder_pattern, char in placeholders.items():
+        while placeholder_pattern in temp_value:
+            marker = f"__ENVLIT_LITERAL_{counter[0]}__"
+            protected[marker] = char
+            temp_value = temp_value.replace(placeholder_pattern, marker, 1)
+            counter[0] += 1
+
+    # Step 2: Find and store all variable references
+    var_refs = {}
+    var_counter = [0]
 
     def replace_var(match):
-        placeholder = f"__ENVLIT_VAR_{counter[0]}__"
+        placeholder = f"__ENVLIT_VAR_{var_counter[0]}__"
         var_refs[placeholder] = match.group(0)
-        counter[0] += 1
+        var_counter[0] += 1
         return placeholder
 
     # Comprehensive pattern to match all variable forms in one pass
@@ -178,9 +196,9 @@ def escape_shell_value(value: str) -> str:
         r"\$([a-zA-Z_][a-zA-Z0-9_]*)"  # Simple $var
         r"|\${#?([a-zA-Z_][a-zA-Z0-9_]*)(?::?[^}]*)?}"  # ${var} or ${#var} with modifiers
     )
-    temp_value = VAR_PATTERN.sub(replace_var, value)
+    temp_value = VAR_PATTERN.sub(replace_var, temp_value)
 
-    # Step 2: Escape special characters for double quotes
+    # Step 3: Escape special characters for double quotes
     # In double quotes, need to escape: \ $ ` " and newline
     temp_value = temp_value.replace("\\", "\\\\")  # Backslash
     temp_value = temp_value.replace("$", "\\$")  # Dollar (for any remaining $)
@@ -188,9 +206,14 @@ def escape_shell_value(value: str) -> str:
     temp_value = temp_value.replace('"', '\\"')  # Double quote
     temp_value = temp_value.replace("\n", "\\n")  # Newline
 
-    # Step 3: Restore variable references (without escaping)
+    # Step 4: Restore variable references (without escaping)
     for placeholder, original in var_refs.items():
         temp_value = temp_value.replace(placeholder, original)
+
+    # Step 5: Restore literal characters (escaped for shell)
+    for marker, char in protected.items():
+        if char == "$":
+            temp_value = temp_value.replace(marker, "\\$")
 
     return temp_value
 
@@ -218,4 +241,4 @@ def _generate_path_operation_script(var_name: str, operations: list[dict[str, st
     # Escape the result for shell and generate single export
     escaped_result = escape_shell_value(result)
 
-    return [f'export {var_name}="{escaped_result}"']
+    return [f'export {var_name}="{escaped_result}"']  # surrounded by double quotes

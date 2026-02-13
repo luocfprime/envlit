@@ -272,3 +272,38 @@ class TestEscapeShellValue:
 
         result = escape_shell_value('${HOME}/path\\with "quotes" and `backticks` and $100')
         assert result == '${HOME}/path\\\\with \\"quotes\\" and \\`backticks\\` and \\$100'
+
+    def test_dollar_placeholder(self):
+        """Test {{DOLLAR}} placeholder for literal dollar sign."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("Price: {{DOLLAR}}100")
+        assert result == "Price: \\$100"
+
+    def test_dollar_placeholder_multiple(self):
+        """Test multiple {{DOLLAR}} placeholders."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("{{DOLLAR}}10 and {{DOLLAR}}20")
+        assert result == "\\$10 and \\$20"
+
+    def test_dollar_placeholder_with_variables(self):
+        """Test {{DOLLAR}} placeholder mixed with variable references."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("Price: {{DOLLAR}}50, Path: ${HOME}")
+        assert result == "Price: \\$50, Path: ${HOME}"
+
+    def test_dollar_placeholder_with_special_chars(self):
+        """Test {{DOLLAR}} placeholder with other special characters."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value('Value: {{DOLLAR}}100, Note: `literal backticks`, Quote: "test"')
+        assert result == 'Value: \\$100, Note: \\`literal backticks\\`, Quote: \\"test\\"'
+
+    def test_dollar_placeholder_complex(self):
+        """Test {{DOLLAR}} placeholder in complex scenario."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("{{DOLLAR}}JAVA_HOME is the variable name, actual value: ${JAVA_HOME}")
+        assert result == "\\$JAVA_HOME is the variable name, actual value: ${JAVA_HOME}"

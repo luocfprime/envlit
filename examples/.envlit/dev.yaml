@@ -45,6 +45,7 @@ hooks:
   pre_load:
     - name: "Check dependencies"
       script: |
+        echo "🐍 Checking dependencies..."
         if ! command -v python3 &> /dev/null; then
           echo "⚠️  Warning: python3 not found"
         fi

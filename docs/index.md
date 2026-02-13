@@ -2,6 +2,14 @@
 
 A minimal CLI tool to organize, load, and switch between your project's environment contexts.
 
+
+## Use Cases
+
+- **Development environments** - Switch between dev/prod configs
+- **ML/AI workflows** - Conveniently manage CUDA devices, model paths, backends, environment variables
+- **Multi-project setup** - Isolated environments per project
+- **Team consistency** - Share common environment configs via git, while keeping local overrides
+
 ## Installation
 
 ```bash
@@ -27,9 +35,9 @@ env:
 Load and unload environments:
 
 ```bash
-el          # Load default profile
-el dev      # Load dev profile
-eul         # Unload environment
+el          # Shell alias for load default profile
+el dev      # Shell alias for load dev profile
+eul         # Shell alias for unload environment
 ```
 
 ## Features
@@ -92,8 +100,14 @@ hooks:
   post_load:
     - name: "Show status"
       script: "echo 'Ready!'"
-  pre_unload: [...]
-  post_unload: [...]
+  pre_unload:
+    - name: "Cleanup"
+      script: |
+        echo "Unloading..."
+        echo "Goodbye!"
+  post_unload:
+    - name: "Confirm"
+      script: "echo 'Environment restored.'"
 ```
 
 ### Config Inheritance
@@ -104,6 +118,36 @@ extends: "./base.yaml"
 env:
   EXTRA_VAR: "value"
 ```
+
+!!! note "Special Characters in Values"
+    **Variable Expansion**: Use shell syntax
+
+    - `$VAR` or `${VAR}` - Expands at runtime
+    - `${VAR:-default}` - With default value
+
+    **Literal Dollar Sign**: Use placeholder
+
+    - `{{DOLLAR}}` - Becomes literal `$`
+    - Example: `PRICE: "{{DOLLAR}}100"` → `$100`
+
+    **Other Special Characters**:
+
+    - Backticks, quotes, backslashes are auto-escaped
+    - Use YAML quote alternation for quotes:
+        - `"value 'with' singles"`
+        - `'value "with" doubles'`
+
+    **Examples**:
+
+    | Input (YAML) | Output in Script | Shell Interprets | Use Case |
+    |--------------|------------------|------------------|----------|
+    | `$HOME` | `$HOME` | `/Users/you` | Variable expansion |
+    | `${HOME}` | `${HOME}` | `/Users/you` | Variable expansion |
+    | `{{DOLLAR}}100` | `\$100` | `$100` | Literal dollar |
+    | `` `cmd` `` | `` \`cmd\` `` | `` `cmd` `` | Literal backtick |
+    | `"quoted"` | `\"quoted\"` | `"quoted"` | Escaped quotes |
+
+    **For complex logic**: Use hooks instead of `env:` section
 
 ### Multiple Profiles
 Switch between dev, test, and prod environments:
@@ -222,13 +266,6 @@ eval "$(envlit init --alias-load myload --alias-unload myunload)"
    - Detects manual changes between snapshots
    - Preserves user modifications during unload
    - Only restores variables changed by envlit (Note: those changed during hooks are not tracked, and should be taken care of in hooks themselves)
-
-## Use Cases
-
-- **Development environments** - Switch between dev/prod configs
-- **ML/AI workflows** - Conveniently manage CUDA devices, model paths, backends, environment variables
-- **Multi-project setup** - Isolated environments per project
-- **Team consistency** - Share common environment configs via git, while keeping local overrides
 
 ## Links
 
