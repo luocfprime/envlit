@@ -355,7 +355,7 @@ def doctor(shell: str):
         click.echo("⚠ No .envlit directory in current directory")
 
     click.echo("\n💡 To add envlit to your shell, add this to your .bashrc or .zshrc:")
-    click.echo("    source <(envlit init)")
+    click.echo('    eval "$(envlit init)"')
 
 
 # Separate CLI for internal tracking (not part of main envlit CLI)
