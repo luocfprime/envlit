@@ -12,7 +12,6 @@ import click
 
 from envlit.__about__ import __version__
 from envlit.config import load_config
-from envlit.constants import get_hash_suffix
 from envlit.script_generator import generate_load_script, generate_unload_script
 
 
@@ -284,7 +283,7 @@ def init(shell: str, alias_load: str, alias_unload: str):
         "",
         "    # Normal load behavior",
         "    local tmp_script",
-        f'    tmp_script=$(mktemp "${{TMPDIR:-/tmp}}/envlit.{get_hash_suffix()}")',
+        '    tmp_script=$(mktemp "${TMPDIR:-/tmp}/envlit.XXXXXX")',
         "",
         '    if envlit load "$@" > "$tmp_script"; then',
         '        source "$tmp_script"',
@@ -310,7 +309,7 @@ def init(shell: str, alias_load: str, alias_unload: str):
         "",
         "    # Normal unload behavior",
         "    local tmp_script",
-        f'    tmp_script=$(mktemp "${{TMPDIR:-/tmp}}/envlit.{get_hash_suffix()}")',
+        '    tmp_script=$(mktemp "${TMPDIR:-/tmp}/envlit.XXXXXX")',
         "",
         '    if envlit unload "$@" > "$tmp_script"; then',
         '        source "$tmp_script"',
