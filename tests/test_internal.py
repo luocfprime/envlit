@@ -1,6 +1,6 @@
 """
 Tests for internal tracking functionality.
-The _envlit_internal_track command is a hidden CLI command used by generated scripts.
+The envlit-internal-track command is a hidden CLI command used by generated scripts.
 """
 
 import json

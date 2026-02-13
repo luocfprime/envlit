@@ -16,12 +16,11 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
     Generate a shell script to load an environment configuration.
 
     The generated script follows the sandwich pattern:
-    1. _envlit_internal_track begin (capture snapshot A)
+    1. envlit-internal-track begin (capture snapshot A)
     2. Pre-load hooks
     3. Environment variable exports
     4. Post-load hooks
-    5. _envlit_internal_track end (capture snapshot B, update state)
-
+    5. envlit-internal-track end (capture snapshot B, update state)
     Args:
         config: Configuration dictionary with env, flags, and hooks sections.
         flag_overrides: Optional dictionary of flag values to override defaults.
@@ -89,10 +88,12 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
             lines.append(hook["script"])
         lines.append("")
 
-    # 5. End tracking - use source <() to execute the state update commands
+    # 5. End tracking - use temp file for Bash 3.2 compatibility (macOS default)
     lines.append("# Capture ending state and update state record")
-    lines.append("source <(envlit-internal-track end)")
-    lines.append("")
+    lines.append("__ENVLIT_TEMP=$(mktemp)")
+    lines.append('envlit-internal-track end > "$__ENVLIT_TEMP"')
+    lines.append('source "$__ENVLIT_TEMP"')
+    lines.append('rm -f "$__ENVLIT_TEMP"')
 
     # 6. Clean up temporary snapshot
     lines.append("# Clean up temporary snapshot")
@@ -126,9 +127,12 @@ def generate_unload_script(config: dict[str, Any]) -> str:
             lines.append(hook["script"])
         lines.append("")
 
-    # 2. Restore original state - use source <() to execute the restore commands
+    # 2. Restore original state - use temp file for Bash 3.2 compatibility (macOS default)
     lines.append("# Restore original environment state")
-    lines.append("source <(envlit-internal-track restore)")
+    lines.append("__ENVLIT_TEMP=$(mktemp)")
+    lines.append('envlit-internal-track restore > "$__ENVLIT_TEMP"')
+    lines.append('source "$__ENVLIT_TEMP"')
+    lines.append('rm -f "$__ENVLIT_TEMP"')
     lines.append("")
 
     # 3. Post-unload hooks
