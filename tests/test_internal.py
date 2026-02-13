@@ -156,6 +156,84 @@ class TestInternalTracking:
         # Should return warning message
         assert "No envlit state" in result
 
+    def test_track_restore_with_manual_changes(self, monkeypatch):
+        """Test restore when user manually changed variables after load."""
+        # Setup state with tracked variables
+        from envlit.constants import get_state_var_name
+
+        state_var = get_state_var_name()
+
+        # State shows: DEBUG was originally unset, envlit set it to "true"
+        state = {
+            "DEBUG": {"original": None, "current": "true"},
+            "API_URL": {"original": "http://old.com", "current": "http://new.com"},
+        }
+        monkeypatch.setenv(state_var, json.dumps(state))
+
+        # Current environment: User manually changed DEBUG to "false" and kept API_URL
+        monkeypatch.setenv("DEBUG", "false")  # Manual change!
+        monkeypatch.setenv("API_URL", "http://new.com")  # No change
+
+        # Call restore
+        result = track_restore()
+
+        # DEBUG: User changed from "true" to "false", should restore to "false" (preserve manual change)
+        assert "export DEBUG=false" in result
+
+        # API_URL: No manual change, should restore to original "http://old.com"
+        assert "export API_URL=http://old.com" in result
+
+        # Should clear state
+        assert f"unset {state_var}" in result
+
+    def test_track_restore_manual_unset(self, monkeypatch):
+        """Test restore when user manually unset a variable after load."""
+        # Setup state
+        from envlit.constants import get_state_var_name
+
+        state_var = get_state_var_name()
+
+        # State shows: TEMP_VAR was originally "old", envlit set it to "new"
+        state = {
+            "TEMP_VAR": {"original": "old", "current": "new"},
+        }
+        monkeypatch.setenv(state_var, json.dumps(state))
+
+        # Current environment: User manually unset TEMP_VAR
+        # (TEMP_VAR is not in environment)
+
+        # Call restore
+        result = track_restore()
+
+        # User unset it (None != "new"), should restore to None (unset)
+        assert "unset TEMP_VAR" in result
+
+    def test_track_restore_manual_set_new_var(self, monkeypatch):
+        """Test restore when user manually set a new variable that wasn't tracked."""
+        # Setup state with one tracked variable
+        from envlit.constants import get_state_var_name
+
+        state_var = get_state_var_name()
+
+        state = {
+            "TRACKED_VAR": {"original": "old", "current": "new"},
+        }
+        monkeypatch.setenv(state_var, json.dumps(state))
+
+        # Current environment
+        monkeypatch.setenv("TRACKED_VAR", "new")
+        monkeypatch.setenv("USER_VAR", "user_value")  # User added this manually
+
+        # Call restore
+        result = track_restore()
+
+        # TRACKED_VAR should be restored to "old"
+        assert "export TRACKED_VAR=old" in result
+
+        # USER_VAR is not tracked, so it won't be in the restore commands
+        # (it will remain in the environment)
+        assert "USER_VAR" not in result
+
     def test_directory_specific_state_var(self, tmp_path):
         """Test that state variable name is directory-specific."""
         from envlit.constants import get_state_var_name

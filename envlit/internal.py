@@ -82,6 +82,7 @@ def track_end() -> str:
 def track_restore() -> str:
     """
     Restore environment variables to their original values from __ENVLIT_STATE.
+    Detects manual changes and preserves them.
     """
     state_var = get_state_var_name()
 
@@ -98,7 +99,15 @@ def track_restore() -> str:
     commands = ["# Restoring environment to original state"]
 
     for var_name in tracked_vars:
+        current_tracked = state_manager.get_current_value(var_name)
+        current_actual = os.environ.get(var_name)
         original = state_manager.get_original_value(var_name)
+
+        # Detect manual interference: if actual value differs from tracked current value
+        if current_actual != current_tracked:
+            # User manually changed this variable after load
+            # Preserve the manual change by updating original to the manual value
+            original = current_actual
 
         if original is None:
             # Variable was originally unset, so we unset it now
