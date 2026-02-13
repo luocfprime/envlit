@@ -196,7 +196,67 @@ echo $DEBUG $CUDA_VISIBLE_DEVICES  # Should be "false" and "1"
 # Current behavior: Variables accumulate (this might be expected or not)
 ```
 
-### Case 3: Special Characters
+### Case 3: Environment Variable Operations
+
+**String values (shortcut for set):**
+```bash
+cat > /tmp/test-ops.yaml << 'EOF'
+env:
+  PROJECT_MODE: "Development"
+  DEBUG: "true"
+EOF
+
+el -c /tmp/test-ops.yaml
+echo $PROJECT_MODE  # Should be "Development"
+echo $DEBUG         # Should be "true"
+eul
+```
+
+**Explicit operations:**
+```bash
+cat > /tmp/test-ops2.yaml << 'EOF'
+env:
+  API_URL:
+    op: set
+    value: "http://localhost:8000"
+
+  PRODUCTION_KEY:
+    op: unset
+
+  PATH:
+    op: prepend
+    value: "./venv/bin"
+EOF
+
+export PRODUCTION_KEY="secret"
+el -c /tmp/test-ops2.yaml
+echo $API_URL           # Should be "http://localhost:8000"
+echo $PRODUCTION_KEY    # Should be unset (no output)
+echo $PATH | head -c 20 # Should start with "./venv/bin"
+eul
+```
+
+**Operation pipeline:**
+```bash
+cat > /tmp/test-pipeline.yaml << 'EOF'
+env:
+  PATH:
+    - op: remove
+      value: "/old/path"
+    - op: prepend
+      value: "./bin"
+    - op: append
+      value: "/opt/bin"
+EOF
+
+export PATH="/usr/bin:/old/path:/bin"
+el -c /tmp/test-pipeline.yaml
+echo $PATH  # Should be "./bin:/usr/bin:/bin:/opt/bin" (removed /old/path)
+eul
+echo $PATH  # Should be "/usr/bin:/old/path:/bin" (restored)
+```
+
+### Case 4: Special Characters
 ```bash
 # Create test config with special chars
 cat > /tmp/test-special.yaml << 'EOF'

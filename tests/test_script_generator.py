@@ -58,9 +58,87 @@ class TestScriptGenerator:
 
         script = generate_load_script(config)
 
-        # Should generate PATH manipulation using path_ops
+        # Should generate PATH manipulation using operations
         assert "PATH" in script
         assert "${HOME}/.local/bin" in script
+
+    def test_script_with_string_value(self):
+        """Test script with simple string value (shortcut for set operation)."""
+        config = {
+            "env": {
+                "PROJECT_MODE": "Development",
+                "DEBUG": "true",
+            },
+            "flags": {},
+            "hooks": {},
+        }
+
+        script = generate_load_script(config)
+
+        assert 'export PROJECT_MODE="Development"' in script
+        assert 'export DEBUG="true"' in script
+
+    def test_script_with_explicit_set_operation(self):
+        """Test script with explicit set operation (dict syntax)."""
+        config = {
+            "env": {
+                "API_URL": {"op": "set", "value": "https://api.example.com"},
+            },
+            "flags": {},
+            "hooks": {},
+        }
+
+        script = generate_load_script(config)
+
+        assert 'export API_URL="https://api.example.com"' in script
+
+    def test_script_with_explicit_unset_operation(self):
+        """Test script with explicit unset operation."""
+        config = {
+            "env": {
+                "TEMP_VAR": {"op": "unset"},
+            },
+            "flags": {},
+            "hooks": {},
+        }
+
+        script = generate_load_script(config)
+
+        assert "unset TEMP_VAR" in script
+
+    def test_script_with_single_prepend_operation(self):
+        """Test script with single prepend operation (not in list)."""
+        config = {
+            "env": {
+                "PATH": {"op": "prepend", "value": "./venv/bin"},
+            },
+            "flags": {},
+            "hooks": {},
+        }
+
+        script = generate_load_script(config)
+
+        assert "PATH" in script
+        assert "./venv/bin" in script
+
+    def test_script_with_operation_pipeline(self):
+        """Test script with pipeline of operations."""
+        config = {
+            "env": {
+                "PATH": [
+                    {"op": "remove", "value": "/old/path"},
+                    {"op": "prepend", "value": "./bin"},
+                    {"op": "append", "value": "/opt/bin"},
+                ]
+            },
+            "flags": {},
+            "hooks": {},
+        }
+
+        script = generate_load_script(config)
+
+        # Should have PATH export
+        assert "export PATH=" in script
 
     def test_script_with_hooks(self):
         """Test generating script with pre/post hooks."""

@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from envlit.constants import SNAPSHOT_VAR_NAME
-from envlit.path_ops import apply_path_operations
+from envlit.operations import apply_operations, normalize_env_value, validate_operation
 
 
 def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] | None = None) -> str:  # noqa: C901
@@ -63,21 +63,28 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
                         env_section[target_var] = flag_value
 
     for var_name, var_value in env_section.items():
-        if var_value is None:
-            # null means unset the variable
-            lines.append(f"unset {var_name}")
-        elif isinstance(var_value, list):
-            # List means PATH operations
-            lines.append(f"# Apply PATH operations to {var_name}")
-            # Generate shell code to apply operations
-            # For now, we'll use a simple approach - the operations will be applied
-            # by reading current $VAR value, applying ops, and exporting
-            script_lines = _generate_path_operation_script(var_name, var_value)
-            lines.extend(script_lines)
-        else:
-            # Simple string value - preserve ${VAR} references for shell expansion
-            escaped_value = escape_shell_value(str(var_value))
-            lines.append(f'export {var_name}="{escaped_value}"')
+        try:
+            # Normalize value to list of operations
+            operations = normalize_env_value(var_value)
+
+            # Validate each operation
+            for op in operations:
+                validate_operation(op)
+
+            # Get initial value from environment
+            initial_value = os.environ.get(var_name)
+
+            # Apply operations to get final value
+            final_value = apply_operations(initial_value, operations)
+
+            # Generate shell command based on final value
+            if final_value is None:
+                lines.append(f"unset {var_name}")
+            else:
+                escaped_value = escape_shell_value(final_value)
+                lines.append(f'export {var_name}="{escaped_value}"')
+        except ValueError as e:
+            raise ValueError(f"Error processing variable '{var_name}': {e}") from e
     lines.append("")
 
     # 4. Post-load hooks
@@ -220,29 +227,3 @@ def escape_shell_value(value: str) -> str:
             temp_value = temp_value.replace(marker, "\\$")
 
     return temp_value
-
-
-def _generate_path_operation_script(var_name: str, operations: list[dict[str, str]]) -> list[str]:
-    r"""
-    Generate shell script lines to apply PATH-like operations to a variable.
-
-    Uses the apply_path_operations() function from path_ops.py to compute
-    the final value at generation time, then generates a single export command.
-
-    Args:
-        var_name: Name of the environment variable (e.g., "PATH").
-        operations: List of operation dictionaries.
-
-    Returns:
-        List of shell script lines.
-    """
-    # Get current value of the variable at generation time
-    current_value = os.environ.get(var_name, None)
-
-    # Apply all operations using the tested path_ops module
-    result = apply_path_operations(current_value, operations)
-
-    # Escape the result for shell and generate single export
-    escaped_result = escape_shell_value(result)
-
-    return [f'export {var_name}="{escaped_result}"']  # surrounded by double quotes

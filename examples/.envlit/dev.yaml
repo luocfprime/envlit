@@ -20,19 +20,35 @@ flags:
 
 # Environment variables
 env:
+  # Simple string values (shortcut for 'op: set')
   PROJECT_MODE: "Development"
   DEBUG: "true"
   LOG_LEVEL: "DEBUG"
 
-  # Path operations example
+  # Explicit set operation (equivalent to string value above)
+  API_URL:
+    op: set
+    value: "http://localhost:8000"
+
+  # Explicit unset operation
+  PRODUCTION_KEY:
+    op: unset
+
+  # Path operations - list of operations (pipeline)
   PATH:
+    - op: remove
+      value: "/usr/local/old-tools"
     - op: prepend
       value: "./bin"
     - op: prepend
       value: "./scripts"
-    - op: remove
-      value: "/usr/local/old-tools"
 
+  # Path operations - single operation (also valid)
+  LD_LIBRARY_PATH:
+    op: prepend
+    value: "./lib"
+
+  # PYTHONPATH - pipeline example
   PYTHONPATH:
     - op: prepend
       value: "./src"

@@ -308,6 +308,46 @@ def init(shell: str, alias_load: str, alias_unload: str):
 
 
 @cli.command()
+@click.option("--from-env", is_flag=True, help="Get values from os.environ instead of state")
+def state(from_env: bool):
+    """
+    Output tracked environment variables in .env format.
+
+    By default, outputs values from envlit's state (last values set by envlit).
+    Use --from-env to output current values from the environment instead.
+
+    Usage:
+        envlit state              # Show tracked variables (from state)
+        envlit state --from-env   # Show current environment values
+        envlit state > .env       # Export to .env file
+    """
+    from envlit.state import StateManager
+
+    try:
+        state_manager = StateManager()
+        env_dict = state_manager.get_env_dict(from_env=from_env)
+
+        if not env_dict:
+            click.echo("# No tracked variables", err=True)
+            return
+
+        # Output in .env format (KEY=VALUE)
+        for key in sorted(env_dict.keys()):
+            value = env_dict[key]
+            # Simple shell quoting - add quotes if value contains spaces or special chars
+            if any(c in value for c in [" ", "\t", "$", "`", '"', "'", "\\"]):
+                # Escape backslashes and double quotes
+                escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+                click.echo(f'{key}="{escaped}"')
+            else:
+                click.echo(f"{key}={value}")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
 @click.option(
     "--shell",
     type=click.Choice(["bash", "zsh", "auto"]),

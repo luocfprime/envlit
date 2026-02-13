@@ -84,3 +84,25 @@ class StateManager:
     def get_tracked_variables(self) -> list[str]:
         """Get list of all tracked variable names."""
         return list(self._state.keys())
+
+    def get_env_dict(self, from_env: bool = False) -> dict[str, str]:
+        """
+        Get tracked variables as a dictionary.
+
+        Args:
+            from_env: If True, get values from os.environ; if False, get from state's 'current' values
+
+        Returns:
+            Dictionary mapping variable names to values
+        """
+        result = {}
+        for var_name in self.get_tracked_variables():
+            if from_env:
+                value = os.environ.get(var_name)
+                if value is not None:
+                    result[var_name] = value
+            else:
+                value = self.get_current_value(var_name)
+                if value is not None:
+                    result[var_name] = value
+        return result

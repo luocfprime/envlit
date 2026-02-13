@@ -97,14 +97,48 @@ flags:
 
 Usage: `eval "$(envlit load --profile dev --cuda 2)"`
 
-### 3. PATH Operations (`dev.yaml`)
+### 3. Environment Variable Operations
+
+**Simple values (shortcut for `op: set`):**
+```yaml
+env:
+  PROJECT_MODE: "Development"
+  DEBUG: "true"
+```
+
+**Explicit set operation:**
+```yaml
+env:
+  API_URL:
+    op: set
+    value: "http://localhost:8000"
+```
+
+**Unset operation:**
+```yaml
+env:
+  PRODUCTION_KEY:
+    op: unset
+```
+
+**Single path operation:**
 ```yaml
 env:
   PATH:
+    op: prepend
+    value: "./venv/bin"
+```
+
+**Pipeline of operations:**
+```yaml
+env:
+  PATH:
+    - op: remove
+      value: "/old/path"
     - op: prepend
       value: "./bin"
-    - op: remove
-      value: "/usr/local/old-tools"
+    - op: append
+      value: "/opt/bin"
 ```
 
 ### 4. Lifecycle Hooks (`all examples`)

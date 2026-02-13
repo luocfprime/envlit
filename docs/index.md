@@ -81,17 +81,45 @@ flags:
 
 Usage: `el dev --cuda 2 -b g` sets `CUDA_VISIBLE_DEVICES=2` and `ML_COMPUTE_BACKEND=GPU`
 
-### Path Operations
-Advanced PATH manipulation with prepend, append, and remove operations:
+### Environment Variable Operations
+envlit supports three syntaxes for setting environment variables:
 
+**1. String shortcut (for simple set operations):**
+```yaml
+env:
+  DEBUG: "true"
+  API_URL: "https://api.example.com"
+```
+
+**2. Dict with single operation:**
 ```yaml
 env:
   PATH:
-    - op: prepend
-      value: "./bin"
+    op: prepend
+    value: "./venv/bin"
+
+  PRODUCTION_KEY:
+    op: unset
+```
+
+**3. List of operations (pipeline):**
+```yaml
+env:
+  PATH:
     - op: remove
       value: "/old/path"
+    - op: prepend
+      value: "./bin"
+    - op: append
+      value: "/usr/local/tools"
 ```
+
+**Available operations:**
+- `set` - Set a value (string shortcut available)
+- `unset` - Unset a variable
+- `prepend` - Add to front of path-like variable
+- `append` - Add to end of path-like variable
+- `remove` - Remove from path-like variable
 
 ### Lifecycle Hooks
 Execute custom scripts at four lifecycle points:
@@ -187,24 +215,35 @@ flags:
 
 # Environment variables
 env:
-  # Simple values
+  # Simple values (string shortcut for 'set' operation)
   DEBUG: "true"
   API_URL: "https://api.example.com"
 
   # Unset variables
-  LEGACY_VAR: null
+  LEGACY_VAR:
+    op: unset
 
   # Shell expansion
   DATA_PATH: "${HOME}/data"
 
-  # Path operations
+  # Single operation (dict syntax)
+  PRODUCTION_MODE:
+    op: set
+    value: "true"
+
+  # Path operations (list of operations - pipeline)
   PATH:
+    - op: remove
+      value: "/deprecated/path"
     - op: prepend
       value: "./bin"
     - op: append
       value: "/usr/local/tools"
-    - op: remove
-      value: "/deprecated/path"
+
+  # Single path operation (dict syntax)
+  PYTHONPATH:
+    op: prepend
+    value: "./src"
 
 # Lifecycle hooks
 hooks:
@@ -235,6 +274,11 @@ el dev --cuda 1       # Load with flags
 
 # Unload environment
 eul
+
+# Export tracked variables to .env file
+envlit state          # Show variables from envlit's state
+envlit state --from-env  # Show current environment values
+envlit state > .env   # Export to .env file
 
 # Check installation
 envlit doctor
