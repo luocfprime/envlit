@@ -130,8 +130,9 @@ def test_init_functions_pass_arguments(runner):
     output = result.output
 
     # Both functions should pass arguments with "$@"
+    # Each function has 3 uses: in for loop, help handling, and normal execution
     assert '"$@"' in output
-    assert output.count('"$@"') == 2  # Once for load, once for unload
+    assert output.count('"$@"') == 6  # 3 per function (load and unload)
 
 
 def test_init_uses_temp_files(runner):

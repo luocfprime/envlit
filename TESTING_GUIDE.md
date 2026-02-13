@@ -7,7 +7,7 @@
 cd examples
 
 # Initialize shell integration
-source <(envlit init)
+eval "$(envlit init)"
 
 # Now you can use 'el' and 'eul' aliases
 el dev --cuda 2

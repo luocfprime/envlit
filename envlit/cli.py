@@ -124,17 +124,18 @@ class DynamicFlagCommand(click.Command):
 @click.argument("profile", required=False)
 @click.option("--config", "-c", type=click.Path(exists=True), help="Path to config file")
 def load(profile: str | None, config: str | None, **kwargs):  # noqa: C901
-    """
-    Generate shell script to load environment configuration.
+    """Generate shell script to load environment configuration.
 
+    \b
     For daily use with aliases (recommended):
-        el                    # Load default profile
-        el dev --cuda 1       # Load dev profile with CUDA device 1
+      el                    # Load default profile
+      el dev --cuda 1       # Load dev profile with CUDA device 1
 
+    \b
     Direct usage (after running 'source <(envlit init)'):
-        source <(envlit load)
-        source <(envlit load dev --cuda 1)
-        source <(envlit load --config path/to/config.yaml)
+      source <(envlit load)
+      source <(envlit load dev --cuda 1)
+      source <(envlit load --config path/to/config.yaml)
 
     Dynamic flags from the config file are automatically added as options.
     """
@@ -196,14 +197,15 @@ def load(profile: str | None, config: str | None, **kwargs):  # noqa: C901
 @click.option("--profile", "-p", help="Profile name (e.g., dev, prod)")
 @click.option("--config", "-c", type=click.Path(exists=True), help="Path to config file")
 def unload(profile: str | None, config: str | None):
-    """
-    Generate shell script to unload environment configuration.
+    """Generate shell script to unload environment configuration.
 
+    \b
     For daily use with aliases (recommended):
-        eul                   # Unload current environment
+      eul                   # Unload current environment
 
+    \b
     Direct usage:
-        source <(envlit unload)
+      source <(envlit unload)
     """
     try:
         # Find config file (needed for hooks)
@@ -239,15 +241,14 @@ def unload(profile: str | None, config: str | None):
 @click.option("--alias-load", default="el", help="Alias for 'envlit load' (default: el)")
 @click.option("--alias-unload", default="eul", help="Alias for 'envlit unload' (default: eul)")
 def init(shell: str, alias_load: str, alias_unload: str):
-    """
-    Generate shell initialization code for envlit.
+    """Generate shell initialization code for envlit.
 
+    \b
     Add this to your .bashrc or .zshrc (recommended):
-        zshrc: source <(envlit init --shell zsh)
-        bashrc: eval "$(envlit init --shell bash)"
-
-    With custom aliases:
-        source <(envlit init --alias-load myload --alias-unload myunload)
+      eval "$(envlit init)"
+      # or with options:
+      eval "$(envlit init --shell zsh)"
+      eval "$(envlit init --alias-load myload --alias-unload myunload)"
 
     The generated code creates shell functions that wrap envlit commands.
     """
@@ -273,6 +274,15 @@ def init(shell: str, alias_load: str, alias_unload: str):
     # Function for load
     lines.extend([
         f"{alias_load}() {{",
+        "    # Check if help flag is present",
+        '    for arg in "$@"; do',
+        '        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then',
+        '            envlit load "$@"',
+        "            return $?",
+        "        fi",
+        "    done",
+        "",
+        "    # Normal load behavior",
         "    local tmp_script",
         f'    tmp_script=$(mktemp "${{TMPDIR:-/tmp}}/envlit.{get_hash_suffix()}")',
         "",
@@ -290,6 +300,15 @@ def init(shell: str, alias_load: str, alias_unload: str):
     # Function for unload
     lines.extend([
         f"{alias_unload}() {{",
+        "    # Check if help flag is present",
+        '    for arg in "$@"; do',
+        '        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then',
+        '            envlit unload "$@"',
+        "            return $?",
+        "        fi",
+        "    done",
+        "",
+        "    # Normal unload behavior",
         "    local tmp_script",
         f'    tmp_script=$(mktemp "${{TMPDIR:-/tmp}}/envlit.{get_hash_suffix()}")',
         "",
@@ -310,16 +329,16 @@ def init(shell: str, alias_load: str, alias_unload: str):
 @cli.command()
 @click.option("--from-env", is_flag=True, help="Get values from os.environ instead of state")
 def state(from_env: bool):
-    """
-    Output tracked environment variables in .env format.
+    """Output tracked environment variables in .env format.
 
     By default, outputs values from envlit's state (last values set by envlit).
     Use --from-env to output current values from the environment instead.
 
+    \b
     Usage:
-        envlit state              # Show tracked variables (from state)
-        envlit state --from-env   # Show current environment values
-        envlit state > .env       # Export to .env file
+      envlit state              # Show tracked variables (from state)
+      envlit state --from-env   # Show current environment values
+      envlit state > .env       # Export to .env file
     """
     from envlit.state import StateManager
 
