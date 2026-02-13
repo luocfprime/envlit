@@ -1,6 +1,6 @@
 [project]
 name = "envlit"
-version = "0.0.2"
+version = "0.0.3"
 description = "A minimal CLI tool to organize, load, and switch between your project's environment contexts."
 authors = [{ name = "Chaofan Luo" }]
 readme = "README.md"
