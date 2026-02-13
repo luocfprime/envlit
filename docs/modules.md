@@ -15,7 +15,7 @@
       show_root_heading: true
       show_source: false
 
-::: envlit.path_ops
+::: envlit.operations
     options:
       show_root_heading: true
       show_source: false
