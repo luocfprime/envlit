@@ -21,7 +21,7 @@ This directory contains example configuration files for `envlit`.
 
 4. **Use smart flags** (for `dev.yaml`):
    ```bash
-   eval "$(envlit load --profile dev --cuda 2 --backend gpu)"
+   eval "$(envlit load --profile dev --cuda 2 --backend g)"
    ```
 
 5. **Unload the environment**:
