@@ -10,6 +10,7 @@ copyright: Maintained by <a href="https://github.com/luocfprime">luocfprime</a>.
 nav:
   - Home: index.md
   - Modules: modules.md
+  - AI Agent Skill: skill.md
 plugins:
   - search
   - mkdocstrings:
