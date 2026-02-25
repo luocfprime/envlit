@@ -67,24 +67,42 @@ class DynamicFlagCommand(click.Command):
     This allows flags like --cuda, --backend to be recognized from the config.
     """
 
-    def parse_args(self, ctx: click.Context, args: list):
-        """Override parse_args to add dynamic options before argument parsing."""
-        # Quick scan for profile (positional arg) and --config/-c values
+    def _parse_for_profile_and_config(self, args: list) -> tuple[str | None, str | None]:
+        """Parse args to extract profile and config path."""
+        # Known options that take a value
+        value_options = {"--config", "-c"}
+        # Known flags that don't take a value (boolean flags)
+        no_value_flags = {"-h", "--help", "--version"}
+
         profile = None
         config_path_str = None
 
         i = 0
         while i < len(args):
-            if args[i] in ["--config", "-c"] and i + 1 < len(args):
+            arg = args[i]
+
+            if arg in value_options and i + 1 < len(args):
                 config_path_str = args[i + 1]
                 i += 2
-            elif not args[i].startswith("-"):
+            elif arg in no_value_flags:
+                i += 1
+            elif arg.startswith("-"):
+                # Flag may have a value - check next arg
+                if i + 1 < len(args) and not args[i + 1].startswith("-"):
+                    i += 2
+                else:
+                    i += 1
+            else:
                 # First non-option argument is the profile
                 if profile is None:
-                    profile = args[i]
+                    profile = arg
                 i += 1
-            else:
-                i += 1
+
+        return profile, config_path_str
+
+    def parse_args(self, ctx: click.Context, args: list):
+        """Override parse_args to add dynamic options before argument parsing."""
+        profile, config_path_str = self._parse_for_profile_and_config(args)
 
         # Find config file
         config_path = Path(config_path_str) if config_path_str else find_config_file(profile)
