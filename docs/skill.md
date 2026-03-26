@@ -8,7 +8,7 @@ Copy and paste this SKILL.md into your project at `.opencode/skills/envlit/SKILL
 ````markdown
 ---
 name: envlit
-description: A CLI tool to organize, load, and switch between environment variable contexts via YAML configs
+description: Use when you need to load project specific environment variables or the user needs help with envlit CLI usage, `.envlit/*.yaml` profiles, dynamic flags, PATH updates, lifecycle hooks, or environment restore/state-tracking issues involving `envlit`, `el`, or `eul`.
 license: MIT
 compatibility: opencode
 metadata:
