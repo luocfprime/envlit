@@ -166,3 +166,42 @@ def test_init_includes_error_handling(runner):
     assert "if envlit unload" in output
     assert "else" in output
     assert "Error: Failed to generate" in output
+
+
+def test_load_binds_dynamic_flag_value_to_config_key(runner, tmp_path):
+    """Test dynamic flags still work when config key differs from long option name."""
+    config_file = tmp_path / "devices.yaml"
+    config_file.write_text("""
+flags:
+  num_devices:
+    flag: ["--num"]
+    default: "8"
+    target: "FSDP_DEVICES"
+hooks:
+  post_load:
+    - name: "Show devices"
+      script: "echo $FSDP_DEVICES"
+""")
+
+    result = runner.invoke(cli, ["load", "--config", str(config_file), "--num", "4"])
+
+    assert result.exit_code == 0
+    assert 'export FSDP_DEVICES="4"' in result.output
+    assert "echo $FSDP_DEVICES" in result.output
+
+
+def test_load_preserves_existing_dynamic_flag_behavior(runner, tmp_path):
+    """Test dynamic flags continue to work when config key matches option name."""
+    config_file = tmp_path / "cuda.yaml"
+    config_file.write_text("""
+flags:
+  cuda:
+    flag: ["--cuda", "-g"]
+    default: "0"
+    target: "CUDA_VISIBLE_DEVICES"
+""")
+
+    result = runner.invoke(cli, ["load", "--config", str(config_file), "-g", "0,1"])
+
+    assert result.exit_code == 0
+    assert 'export CUDA_VISIBLE_DEVICES="0,1"' in result.output

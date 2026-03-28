@@ -120,12 +120,14 @@ class DynamicFlagCommand(click.Command):
 
                         # Get flag aliases
                         flag_aliases = flag_config.get("flag", [f"--{flag_name}"])
+                        if isinstance(flag_aliases, str):
+                            flag_aliases = [flag_aliases]
                         default_value = flag_config.get("default", None)
                         target = flag_config.get("target", flag_name.upper())
 
                         # Add option to command
                         option = click.Option(
-                            param_decls=flag_aliases,
+                            param_decls=[*flag_aliases, flag_name],
                             default=default_value,
                             help=f"Set {target} (default: {default_value})",
                         )
