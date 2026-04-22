@@ -76,6 +76,20 @@ echo $DEBUG              # Output: (empty - variable restored to original state)
 - You need to preserve user modifications and restore clean state
 - You need complex PATH operations or lifecycle hooks
 
+## AI Agent Skill
+
+> [!TIP]
+> Install the envlit skill to let your AI assistant manage envlit profiles directly.
+>
+> **Claude Code** — install via marketplace:
+> ```
+> /plugin marketplace add luocfprime/envlit
+> /plugin install envlit-skill@envlit
+> ```
+> Or copy [`skills/envlit/SKILL.md`](skills/envlit/SKILL.md) to `~/.claude/skills/envlit/SKILL.md`
+>
+> **OpenCode** — copy [`skills/envlit/SKILL.md`](skills/envlit/SKILL.md) to `.opencode/skills/envlit/SKILL.md`
+
 ## Documentation
 
 Visit [luocfprime.github.io/envlit](https://luocfprime.github.io/envlit/) for full documentation.

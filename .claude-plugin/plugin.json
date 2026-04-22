@@ -1,0 +1,6 @@
+{
+  "name": "envlit-skill",
+  "description": "envlit skill for Claude Code — helps AI assistants manage environment variable profiles",
+  "version": "1.0.0",
+  "skills": "./skills"
+}
