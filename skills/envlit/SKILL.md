@@ -1,6 +1,6 @@
 ---
 name: envlit
-description: Use when you need to load project specific environment variables or the user needs help with envlit CLI usage, `.envlit/*.yaml` profiles, dynamic flags, PATH updates, lifecycle hooks, or environment restore/state-tracking issues involving `envlit`, `el`, or `eul`.
+description: Use when you need to load project-specific environment variables or the user needs help with envlit CLI usage, `.envlit/*.yaml` profiles, dynamic flags, PATH operations, lifecycle hooks, or environment restore/state-tracking issues involving `envlit`, `el`, or `eul`.
 license: MIT
 compatibility: opencode
 metadata:
@@ -9,169 +9,316 @@ metadata:
   language: shell
 ---
 
-## What I do
-- Help you understand and use envlit for environment variable management
-- Guide config file creation and YAML syntax
-- Explain state tracking, dynamic flags, PATH operations, and hooks
-- Debug issues with loading/unloading environments
+# envlit — Environment Profile Manager
 
-## When to use me
-- User wants to use envlit CLI (`envlit`, `el`, `eul`)
-- User wants to manage environment variables with YAML configs
-- Need to set up envlit in a project
-- Configuring dynamic CLI flags or lifecycle hooks
-- Debugging state restoration issues
+envlit lets you define named **environment profiles** in YAML files, then load/unload them with a single shell command. It tracks what it changed and intelligently restores your original environment, preserving any manual changes you made in between.
 
-## Quick Start
+## When to use envlit
+
+- Switching between dev/staging/prod configs in the same shell
+- ML/AI workflows: manage `CUDA_VISIBLE_DEVICES`, model paths, backends per experiment
+- Multi-project setups: each project has its own `.envlit/` folder committed to git
+- Team consistency: share base configs via git, keep personal overrides locally
+
+---
+
+## Installation & Shell Setup
 
 ```bash
-# Install
 pip install envlit
 
-# Initialize shell (add to .bashrc/.zshrc)
-# This sets up `el` and `eul` aliases
+# Add to ~/.bashrc or ~/.zshrc (once):
 eval "$(envlit init)"
-
-# Create config at .envlit/default.yaml, then:
-el          # Load default profile (alias for envlit load)
-eul         # Unload and restore (alias for envlit unload)
 ```
+
+`envlit init` outputs shell function definitions for `el` (load) and `eul` (unload). Without this line, `el`/`eul` are not available.
+
+Customize the alias names:
+```bash
+eval "$(envlit init --alias-load myload --alias-unload myunload)"
+```
+
+---
 
 ## Core Commands
 
-| Command | Shell Alias | Purpose |
-|---------|-------------|---------|
-| `envlit init` | - | Output shell integration code (sets up aliases below) |
-| `envlit load <profile>` | `el` | Load environment from config |
-| `envlit unload` | `eul` | Restore original state |
+| Command | What it does |
+|---------|-------------|
+| `el` | Load `.envlit/default.yaml` |
+| `el <profile>` | Load `.envlit/<profile>.yaml` |
+| `el <profile> --flag value` | Load with dynamic flag overrides |
+| `eul` | Unload and restore original environment |
+| `envlit state` | Show tracked variables (from envlit's last load) |
+| `envlit state --from-env` | Show current shell values for tracked vars |
+| `envlit state > .env` | Export tracked vars to a `.env` file |
+| `envlit doctor` | Diagnose installation and config issues |
 
-**Note:** `el` and `eul` are shell aliases created by `envlit init`. They only work after running `eval "$(envlit init)"`.
+---
 
-## Config Format (.envlit/<profile>.yaml)
+## Config File Format (`.envlit/<profile>.yaml`)
 
-### Simple Values
+Config files live in a `.envlit/` directory in your project root.
+
+### Full annotated example
+
 ```yaml
+# Optional: inherit from another profile
+extends: "./base.yaml"
+
+# Dynamic CLI flags (added to `el` as --<name> options at runtime)
+flags:
+  cuda:
+    flag: ["--cuda", "-g"]       # CLI option names (list of strings)
+    default: "0"                  # default value if flag not passed
+    target: "CUDA_VISIBLE_DEVICES"  # env var to set
+
+  backend:
+    flag: ["--backend", "-b"]
+    default: "c"
+    target: "ML_COMPUTE_BACKEND"
+    map:                          # map flag values to env var values
+      c: "CPU"
+      g: "GPU"
+      t: "TPU"
+
+# Environment variables
 env:
-  PROJECT_MODE: "Development"
+  # 1. String shorthand — equivalent to op: set
   DEBUG: "true"
-```
+  API_URL: "https://api.example.com"
 
-### Explicit Operations
-```yaml
-env:
-  API_URL:
-    op: set
-    value: "http://localhost:8000"
+  # 2. Single operation (dict syntax)
+  PYTHONPATH:
+    op: prepend
+    value: "./src"
 
   OLD_VAR:
     op: unset
 
+  # 3. Operation pipeline (list)
   PATH:
+    - op: remove
+      value: "/deprecated/bin"
     - op: prepend
       value: "./bin"
     - op: append
       value: "/opt/tools"
-    - op: remove
-      value: "/old/path"
+
+  # Shell variable expansion (default behaviour)
+  DATA_DIR: "${HOME}/data"
+
+  # Literal dollar sign — use interpolate: false
+  PRICE_TAG:
+    op: set
+    value: "$9.99"
+    interpolate: false
+
+# Lifecycle hooks — each hook has a name (string) and script (bash string)
+hooks:
+  pre_load:
+    - name: "Check docker"
+      script: "command -v docker >/dev/null || echo 'Warning: docker not found'"
+  post_load:
+    - name: "Show status"
+      script: "echo 'Environment loaded'"
+  pre_unload:
+    - name: "Cleanup"
+      script: "echo 'Unloading...'"
+  post_unload:
+    - name: "Confirm"
+      script: "echo 'Environment restored'"
 ```
 
-### Dynamic CLI Flags
+---
+
+## Environment Variable Operations
+
+| Operation | When to use | Required fields |
+|-----------|-------------|-----------------|
+| `set` | Set a value (also the string shorthand) | `value` |
+| `unset` | Remove a variable entirely | — |
+| `prepend` | Insert at the front of a `:` separated list | `value` |
+| `append` | Insert at the back of a `:` separated list | `value` |
+| `remove` | Remove an entry from a `:` separated list | `value` |
+
+All operations support an optional `separator` field (default `:`):
 ```yaml
+env:
+  PYTHONPATH:
+    op: prepend
+    value: "./src"
+    separator: ":"   # explicit (same as default)
+```
+
+**`interpolate` field** (on single dict ops only, default `true`):
+- `true` — `$VAR` and `${VAR}` in the value expand at shell runtime
+- `false` — value is treated as a literal string; `$` is never expanded
+
+```yaml
+env:
+  # $HOME expands when the shell sources the generated script
+  BIN_DIR:
+    op: set
+    value: "${HOME}/.local/bin"
+    interpolate: true   # default, can be omitted
+
+  # $9.99 stays literally as $9.99
+  PRICE:
+    op: set
+    value: "$9.99"
+    interpolate: false
+```
+
+> **Env var name constraint**: names must match `[a-zA-Z_][a-zA-Z0-9_]*`. Names with hyphens (e.g. `MY-VAR`) are rejected.
+
+---
+
+## Dynamic Flags
+
+Flags declared in `flags:` become real CLI options on the `el` command:
+
+```yaml
+# .envlit/dev.yaml
 flags:
   cuda:
-    env: CUDA_VISIBLE_DEVICES
-    help: "GPU device ID"
+    flag: ["--cuda", "-g"]
     default: "0"
-    aliases: ["g"]
-
+    target: "CUDA_VISIBLE_DEVICES"
   backend:
-    env: ML_COMPUTE_BACKEND
-    choices:
+    flag: ["--backend", "-b"]
+    default: "c"
+    target: "ML_COMPUTE_BACKEND"
+    map:
       c: "CPU"
       g: "GPU"
       t: "TPU"
 ```
 
-Usage: `el dev --cuda 2 --backend g`
-
-### Lifecycle Hooks
-```yaml
-hooks:
-  pre-load:
-    - echo "Loading..."
-  post-load:
-    - echo "Ready!"
-  pre-unload:
-    - echo "Unloading..."
-  post-unload:
-    - echo "Done!"
-```
-
-### Config Inheritance
-```yaml
-extends: base.yaml  # Load base.yaml first, then merge
-```
-
-## State Tracking (Compare-and-Swap)
-
-envlit preserves user changes:
-
 ```bash
-export CUDA_VISIBLE_DEVICES="0"
-el dev --cuda 1       # Sets to "1"
-export CUDA_VISIBLE_DEVICES="7"  # User changes it
-el dev --cuda 2       # Sets to "2"
-eul                   # Restores to "7" (user's value, not "0")
+el dev                     # CUDA_VISIBLE_DEVICES=0, ML_COMPUTE_BACKEND=CPU
+el dev --cuda 2            # CUDA_VISIBLE_DEVICES=2, ML_COMPUTE_BACKEND=CPU
+el dev -g 0,1 -b g         # CUDA_VISIBLE_DEVICES=0,1, ML_COMPUTE_BACKEND=GPU
+el dev --help              # Shows all flags including --cuda and --backend
 ```
 
-## Special Characters
+Flag fields:
+- `flag` — list of CLI option strings (e.g. `["--cuda", "-g"]`)
+- `default` — default string value when flag is not passed
+- `target` — name of the environment variable to set
+- `map` (optional) — dict mapping flag input → env var value
 
-```yaml
-env:
-  # Variable expansion (default, interpolate: true)
-  PATH: "${HOME}/bin"
+---
 
-  # Literal $ — use interpolate: false
-  PRICE:
-    op: set
-    value: "$100"
-    interpolate: false
+## Config Inheritance
 
-  # Backticks are auto-escaped
-  CMD: "Use `ls` command"
-```
-
-## Common Patterns
-
-### Development Profile
 ```yaml
 # .envlit/dev.yaml
+extends: "./base.yaml"   # path relative to this file
+env:
+  DEBUG: "true"          # overrides base
+```
+
+Merge rules:
+- `env`: child wins (shallow merge per key)
+- `flags`: child wins (shallow merge per key)
+- `hooks`: lists are **concatenated** (base hooks run first)
+
+---
+
+## State Tracking
+
+envlit uses a Compare-and-Swap algorithm so it never clobbers manual changes:
+
+```bash
+el dev                            # envlit sets DEBUG=true
+export DEBUG=verbose              # you change it manually
+eul                               # envlit restores DEBUG to original value
+                                  # (NOT to "verbose" — envlit saw you changed it)
+```
+
+Three scenarios on unload:
+1. **Variable was unset before load** → unset it again
+2. **Variable was set before load, not touched since** → restore original value
+3. **You modified it after load** → leave it at your value (not restored)
+
+> `eul` works only in the same shell session as `el`. Opening a new terminal loses the tracking state.
+
+---
+
+## Config Inheritance Pattern (Multi-profile Setup)
+
+```
+.envlit/
+├── base.yaml      # shared: API URLs, common tools
+├── dev.yaml       # extends base, debug flags
+└── prod.yaml      # extends base, prod settings
+```
+
+```yaml
+# base.yaml
+env:
+  APP_NAME: "myapp"
+  LOG_FORMAT: "json"
+hooks:
+  post_load:
+    - name: "Banner"
+      script: "echo 'Loaded ${APP_NAME}'"
+
+# dev.yaml
+extends: "./base.yaml"
 env:
   DEBUG: "true"
   LOG_LEVEL: "debug"
-flags:
-  port:
-    env: APP_PORT
-    default: "8000"
-```
+  API_URL: "http://localhost:8000"
 
-### Production Profile
-```yaml
-# .envlit/prod.yaml
-extends: base.yaml
+# prod.yaml
+extends: "./base.yaml"
 env:
   DEBUG: "false"
   LOG_LEVEL: "warn"
+  API_URL: "https://api.example.com"
 ```
+
+---
+
+## Special Characters Reference
+
+| YAML value | Shell sees | Notes |
+|-----------|-----------|-------|
+| `"$HOME/data"` | `/Users/you/data` | Shell expands `$HOME` (interpolate: true) |
+| `"${PATH:-/usr/bin}"` | default expansion | Full `${VAR:-default}` syntax supported |
+| `"price $9.99"` | `price $9.99` (⚠ $9 expands!) | Use `interpolate: false` for literal `$` |
+| `"Use \`ls\`"` | `` Use `ls` `` | Backticks auto-escaped in double-quote mode |
+| `'has "double" quotes'` | `has "double" quotes` | YAML single-quote wrapping |
+
+> `${VAR:-${OTHER}}` (nested expansions) are **not** supported — the inner `}` terminates the match early.
+
+---
 
 ## Troubleshooting
 
-Run `envlit doctor` to diagnose common issues.
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `el: command not found` | Shell not initialized | Add `eval "$(envlit init)"` to `.bashrc`/`.zshrc`, then `source ~/.zshrc` |
+| Config not loading | Wrong filename | File must be `.envlit/<profile>.yaml` (or `.yml`), in the current directory |
+| Dynamic flags missing from `--help` | YAML syntax error in `flags:` | Check indentation; run `envlit doctor` |
+| Variables not restored after `eul` | Different shell session | `eul` only works in the shell that ran `el` |
+| `Invalid environment variable name` | Hyphen/space in YAML key | Rename key to match `[a-zA-Z_][a-zA-Z0-9_]*` |
+| Hook not running | Wrong key name | Hook keys are `pre_load`, `post_load`, `pre_unload`, `post_unload` (underscore) |
 
-- **Command not found**: Run `eval "$(envlit init)"` first
-- **Config not loading**: Check file is at `.envlit/<name>.yaml`
-- **Variables not restored**: Check `eul` was run in same shell session
-- **Flags not appearing**: Verify YAML syntax, check `el <profile> --help`
+Run `envlit doctor` for automated diagnosis.
+
+---
+
+## How to Help Users
+
+1. **New setup** → guide through `pip install envlit`, `eval "$(envlit init)"`, create `.envlit/default.yaml`
+2. **YAML errors** → check hook key names (underscores), flag field names (`flag`/`target`/`map`), valid env var names
+3. **State confusion** → explain CAS algorithm; `eul` only works in same shell session
+4. **Flags not working** → verify `flag` is a list, `target` matches exact env var name, `map` keys match what user passes on CLI
+5. **PATH operations** → use pipeline syntax (list of dicts); `separator` defaults to `:`
+
+---
 
 ## Links
 
