@@ -1,12 +1,6 @@
 ---
 name: envlit
 description: Use when you need to load project-specific environment variables or the user needs help with envlit CLI usage, `.envlit/*.yaml` profiles, dynamic flags, PATH operations, lifecycle hooks, or environment restore/state-tracking issues involving `envlit`, `el`, or `eul`.
-license: MIT
-compatibility: opencode
-metadata:
-  audience: developers
-  tool: envlit
-  language: shell
 ---
 
 # envlit — Environment Profile Manager
@@ -47,11 +41,35 @@ eval "$(envlit init --alias-load myload --alias-unload myunload)"
 | `el` | Load `.envlit/default.yaml` |
 | `el <profile>` | Load `.envlit/<profile>.yaml` |
 | `el <profile> --flag value` | Load with dynamic flag overrides |
+| `el --config /path/to/any.yaml` | Load an arbitrary config file (bypasses `.envlit/` lookup) |
 | `eul` | Unload and restore original environment |
-| `envlit state` | Show tracked variables (from envlit's last load) |
-| `envlit state --from-env` | Show current shell values for tracked vars |
+| `envlit state` | Print tracked variables in `KEY=VALUE` format |
+| `envlit state --from-env` | Print current shell values for tracked vars |
 | `envlit state > .env` | Export tracked vars to a `.env` file |
 | `envlit doctor` | Diagnose installation and config issues |
+
+### `--config` / `-c` flag
+
+`el` and `eul` accept `--config` (short: `-c`) to load any YAML file regardless of location:
+
+```bash
+el --config ~/shared/base.yaml           # load by path, no profile name
+el dev --config /tmp/override.yaml       # profile name is ignored when --config is given
+envlit load --config path/to/config.yaml # underlying command also supports it
+```
+
+### `envlit state` output format
+
+Output is one `KEY=VALUE` per line, sorted alphabetically. Values containing spaces, tabs, `$`, backticks, quotes, or backslashes are wrapped in double quotes with special characters escaped. Plain values (only letters, digits, `/`, `:`, `.`, `-`, `_`, etc.) are output bare:
+
+```
+API_URL=https://api.example.com
+DEBUG=true
+PATH=/home/user/.local/bin:/usr/bin:/bin
+PROJECT_DIR="/home/user/my project"
+```
+
+In the example above, `PATH` has no special characters so it is unquoted; `PROJECT_DIR` contains a space so it is double-quoted.
 
 ---
 
@@ -113,14 +131,24 @@ env:
     value: "$9.99"
     interpolate: false
 
+  # null (YAML null) is shorthand for op: unset
+  REMOVED_VAR: null
+
 # Lifecycle hooks — each hook has a name (string) and script (bash string)
+# script can be a single line or a multiline block using YAML's | scalar
 hooks:
   pre_load:
     - name: "Check docker"
       script: "command -v docker >/dev/null || echo 'Warning: docker not found'"
+    - name: "Multi-line setup"
+      script: |
+        echo 'Starting setup...'
+        mkdir -p /tmp/myapp
+        echo 'Done'
   post_load:
+    # post_load runs AFTER env vars are exported — can reference newly set vars
     - name: "Show status"
-      script: "echo 'Environment loaded'"
+      script: "echo 'Loaded. DEBUG=${DEBUG}, MODE=${PROJECT_MODE}'"
   pre_unload:
     - name: "Cleanup"
       script: "echo 'Unloading...'"
@@ -128,6 +156,16 @@ hooks:
     - name: "Confirm"
       script: "echo 'Environment restored'"
 ```
+
+**Hook execution order during load:**
+1. `pre_load` hooks run first (env vars NOT yet set — see pre-load state)
+2. Environment variables are exported
+3. `post_load` hooks run (env vars ARE set — safe to reference `$MY_VAR`)
+
+**Hook execution order during unload:**
+1. `pre_unload` hooks run (env vars still set from the load)
+2. Environment is restored to original state
+3. `post_unload` hooks run (env vars are unset/restored)
 
 ---
 
@@ -154,6 +192,8 @@ env:
 - `true` — `$VAR` and `${VAR}` in the value expand at shell runtime
 - `false` — value is treated as a literal string; `$` is never expanded
 
+> **Important**: `interpolate` is only recognised on a **single dict operation** (`{op: set, value: ..., interpolate: false}`). It is **not supported** inside a list pipeline — list steps always use double-quote (interpolate: true) mode. If you need a literal `$` in a pipeline, restructure to a single dict op.
+
 ```yaml
 env:
   # $HOME expands when the shell sources the generated script
@@ -167,6 +207,18 @@ env:
     op: set
     value: "$9.99"
     interpolate: false
+
+  # WRONG — interpolate is ignored in list pipelines:
+  # BAD_EXAMPLE:
+  #   - op: set
+  #     value: "$9.99"
+  #     interpolate: false   # has no effect here
+```
+
+**`null` shorthand**: A YAML `null` value is equivalent to `op: unset`:
+```yaml
+env:
+  OLD_API_KEY: null   # same as: op: unset
 ```
 
 > **Env var name constraint**: names must match `[a-zA-Z_][a-zA-Z0-9_]*`. Names with hyphens (e.g. `MY-VAR`) are rejected.
@@ -202,10 +254,10 @@ el dev --help              # Shows all flags including --cuda and --backend
 ```
 
 Flag fields:
-- `flag` — list of CLI option strings (e.g. `["--cuda", "-g"]`)
-- `default` — default string value when flag is not passed
-- `target` — name of the environment variable to set
-- `map` (optional) — dict mapping flag input → env var value
+- `flag` — CLI option name(s): a single string (`"--cuda"`) or list (`["--cuda", "-g"]`). If omitted, defaults to `--<flag_name>` (e.g., a flag named `port` becomes `--port`)
+- `default` — default string value used when the flag is **not** passed on the CLI. A value passed on the CLI always overrides the default (e.g., `el dev --cuda 2` sets `CUDA_VISIBLE_DEVICES=2` regardless of `default: "0"`)
+- `target` — name of the environment variable to set. If omitted, defaults to `FLAG_NAME.upper()` (e.g., flag `port` → `PORT`)
+- `map` (optional) — dict mapping flag input → env var value. If the user passes a value **not** in the map, the raw flag value is used directly as the env var value (no error).
 
 ---
 
@@ -222,6 +274,8 @@ Merge rules:
 - `env`: child wins (shallow merge per key)
 - `flags`: child wins (shallow merge per key)
 - `hooks`: lists are **concatenated** (base hooks run first)
+
+**Multi-level chaining is supported**: `dev.yaml` → `staging.yaml` → `base.yaml` all resolve correctly. Each file's `extends` is resolved before merging, so the full ancestor chain is flattened in order.
 
 ---
 
@@ -242,6 +296,12 @@ Three scenarios on unload:
 3. **You modified it after load** → leave it at your value (not restored)
 
 > `eul` works only in the same shell session as `el`. Opening a new terminal loses the tracking state.
+
+**Running `el` twice without `eul`**: Safe. The CAS algorithm detects that each variable's value matches what the previous `el` set (no manual interference), keeps the original pre-first-load value, and just updates `current`. `eul` restores to the state before the **first** `el` in the session.
+
+**`eul` with no prior `el`**: If `eul` is run in a shell where `el` was never called (no tracking state exists), it is a no-op — it outputs a comment and makes no changes.
+
+**No parent-directory traversal**: `el` only looks for `.envlit/` in the **current working directory**. It does not walk up to parent directories. Run `el` from your project root (where `.envlit/` lives), or use `--config` to point at a file by path.
 
 ---
 
