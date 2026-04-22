@@ -264,11 +264,15 @@ env:
   FOO: 0
   BAR: $FOO
   BAZ: ${SOME_ENV_VAR:-default}
-  # Literal dollar with {{DOLLAR}} placeholder
-  PRICE: "Item costs {{DOLLAR}}100"
-  DOLLAR_VAR: "{{DOLLAR}}JAVA_HOME is the variable name"
-  # Mixed: literal dollar and variable expansion
-  MIXED: 'Price: {{DOLLAR}}50, Path: ${HOME}'
+  # Literal dollar: use interpolate: false
+  PRICE:
+    op: set
+    value: "Item costs $100"
+    interpolate: false
+  DOLLAR_VAR:
+    op: set
+    value: "$JAVA_HOME is the variable name"
+    interpolate: false
   # Backticks are always literal (auto-escaped)
   NOTE: "Use `command` syntax"
   # Quotes work via YAML alternation
@@ -281,9 +285,8 @@ el -c /tmp/test-special.yaml
 echo $FOO          # Should be "0"
 echo $BAR          # Should be "0" (expanded from $FOO)
 echo $BAZ          # Should be "default"
-echo $PRICE        # Should be "$100" (literal dollar)
+echo $PRICE        # Should be "Item costs $100" (literal dollar)
 echo $DOLLAR_VAR   # Should be "$JAVA_HOME is the variable name"
-echo $MIXED        # Should be "Price: $50, Path: /Users/you" ($ literal, ${HOME} expanded)
 echo $NOTE         # Should be "Use `command` syntax" (backticks literal)
 echo $TEST_REF     # ${HOME} should be expanded by shell
 ```

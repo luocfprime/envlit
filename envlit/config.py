@@ -54,29 +54,6 @@ def load_config(config_path: str) -> dict[str, Any]:
     return config
 
 
-def resolve_inheritance(config: dict[str, Any], config_dir: Path) -> dict[str, Any]:
-    """
-    Resolve inheritance in a configuration.
-
-    Args:
-        config: Configuration dictionary.
-        config_dir: Directory containing the config file (for resolving relative paths).
-
-    Returns:
-        Configuration with inheritance resolved.
-    """
-    if "extends" not in config:
-        return config
-
-    parent_path = config.pop("extends")
-    # Resolve relative paths
-    if not Path(parent_path).is_absolute():
-        parent_path = config_dir / parent_path
-
-    parent_config = load_config(str(parent_path))
-    return _merge_configs(parent_config, config)
-
-
 def _merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:  # noqa: C901
     """
     Merge two configurations with override taking precedence.

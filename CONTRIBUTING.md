@@ -1,6 +1,6 @@
 # Contributing to envlit
 
-Thank you for your interest in contributing to **envlit**, a tool for scalar field visualization using Polyscope.
+Thank you for your interest in contributing to **envlit**, a YAML-based environment profile manager for shell environments.
 This document outlines the minimal steps to set up a development environment, coding standards, and contribution guidelines.
 
 ---

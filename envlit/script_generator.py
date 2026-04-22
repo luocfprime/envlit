@@ -10,6 +10,8 @@ from typing import Any
 from envlit.constants import SNAPSHOT_VAR_NAME
 from envlit.operations import apply_operations, normalize_env_value, validate_operation
 
+_VALID_VAR_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
 
 def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] | None = None) -> str:  # noqa: C901
     """
@@ -46,7 +48,7 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
 
     # 3. Environment variable exports
     lines.append("# Environment variables")
-    env_section = config.get("env", {})
+    env_section = dict(config.get("env", {}))
 
     # Apply flag overrides first
     if flag_overrides:
@@ -63,7 +65,15 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
                         env_section[target_var] = flag_value
 
     for var_name, var_value in env_section.items():
+        if not _VALID_VAR_NAME.match(var_name):
+            raise ValueError(f"Invalid environment variable name '{var_name}': must match [a-zA-Z_][a-zA-Z0-9_]*")
         try:
+            # Extract interpolate flag (only meaningful on single-dict ops)
+            interpolate = True
+            if isinstance(var_value, dict) and "interpolate" in var_value:
+                interpolate = bool(var_value["interpolate"])
+                var_value = {k: v for k, v in var_value.items() if k != "interpolate"}
+
             # Normalize value to list of operations
             operations = normalize_env_value(var_value)
 
@@ -80,9 +90,10 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
             # Generate shell command based on final value
             if final_value is None:
                 lines.append(f"unset {var_name}")
+            elif interpolate:
+                lines.append(f'export {var_name}="{_escape_interpolated(final_value)}"')
             else:
-                escaped_value = escape_shell_value(final_value)
-                lines.append(f'export {var_name}="{escaped_value}"')
+                lines.append(f"export {var_name}='{_escape_literal(final_value)}'")
         except ValueError as e:
             raise ValueError(f"Error processing variable '{var_name}': {e}") from e
     lines.append("")
@@ -153,77 +164,76 @@ def generate_unload_script(config: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def escape_shell_value(value: str) -> str:
+def _escape_interpolated(value: str) -> str:
     r"""
-    Escape a value for use in a shell script, preserving ${VAR} references.
+    Escape a value for use inside double quotes, preserving ${VAR}/$VAR references.
 
-    We want to preserve ${VAR} and $VAR for shell expansion, including complex
-    parameter expansions with modifiers like ${VAR:-default}, ${VAR:0:5}, etc.
-    Since we use double quotes, we need to escape: $ ` " \ and newlines,
-    EXCEPT for variable references and their modifiers.
-
-    Supports {{DOLLAR}} placeholder for literal dollar signs.
-
-    Args:
-        value: The value to escape.
-
-    Returns:
-        Escaped value safe for use in double quotes.
+    Any $-sign that is not part of a valid variable reference is escaped as \$.
+    To include a literal $ alongside variable expansion, use interpolate: false
+    for the whole value instead.
     """
-    # Strategy: Replace {{DOLLAR}} and ${VAR}/$VAR patterns with placeholders,
-    # escape everything, then restore the patterns.
-
-    # Step 1: Protect {{DOLLAR}} placeholder
-    placeholders = {
-        "{{DOLLAR}}": "$",  # For literal dollar sign
-    }
-
-    protected = {}
-    counter = [0]
-    temp_value = value
-
-    for placeholder_pattern, char in placeholders.items():
-        while placeholder_pattern in temp_value:
-            marker = f"__ENVLIT_LITERAL_{counter[0]}__"
-            protected[marker] = char
-            temp_value = temp_value.replace(placeholder_pattern, marker, 1)
-            counter[0] += 1
-
-    # Step 2: Find and store all variable references
-    var_refs = {}
+    # Step 1: Stash all $VAR / ${…} patterns so they survive escaping
+    var_refs: dict[str, str] = {}
     var_counter = [0]
 
-    def replace_var(match):
+    def replace_var(match: re.Match) -> str:
         placeholder = f"__ENVLIT_VAR_{var_counter[0]}__"
         var_refs[placeholder] = match.group(0)
         var_counter[0] += 1
         return placeholder
 
-    # Comprehensive pattern to match all variable forms in one pass
-    # 1. Simple $var
-    # 2. ${var} with optional modifiers (e.g., ${var:-default}, ${var:0:5}, ${var/old/new})
-    # 3. ${#var} (length operator) and other special operators
+    # Matches $VAR and ${VAR} with optional modifiers (:-default, :0:5, /old/new, etc.)
+    # and the ${#VAR} length operator. Does NOT support nested expansions like
+    # ${VAR:-${OTHER}} — the inner } would terminate the match early.
     VAR_PATTERN = re.compile(
         r"\$([a-zA-Z_][a-zA-Z0-9_]*)"  # Simple $var
         r"|\${#?([a-zA-Z_][a-zA-Z0-9_]*)(?::?[^}]*)?}"  # ${var} or ${#var} with modifiers
     )
-    temp_value = VAR_PATTERN.sub(replace_var, temp_value)
+    temp_value = VAR_PATTERN.sub(replace_var, value)
 
-    # Step 3: Escape special characters for double quotes
-    # In double quotes, need to escape: \ $ ` " and newline
-    temp_value = temp_value.replace("\\", "\\\\")  # Backslash
-    temp_value = temp_value.replace("$", "\\$")  # Dollar (for any remaining $)
-    temp_value = temp_value.replace("`", "\\`")  # Backtick
-    temp_value = temp_value.replace('"', '\\"')  # Double quote
-    temp_value = temp_value.replace("\n", "\\n")  # Newline
+    # Step 2: Escape characters that are special inside double quotes.
+    # Note: real newlines (\x0a) become the two-char sequence \n here, which bash
+    # does NOT interpret as a newline inside double quotes. Use interpolate: false
+    # (single-quote mode) if the value contains literal newlines.
+    temp_value = temp_value.replace("\\", "\\\\")
+    temp_value = temp_value.replace("$", "\\$")
+    temp_value = temp_value.replace("`", "\\`")
+    temp_value = temp_value.replace('"', '\\"')
+    temp_value = temp_value.replace("\n", "\\n")
 
-    # Step 4: Restore variable references (without escaping)
+    # Step 3: Restore variable references verbatim
     for placeholder, original in var_refs.items():
         temp_value = temp_value.replace(placeholder, original)
 
-    # Step 5: Restore literal characters (escaped for shell)
-    for marker, char in protected.items():
-        if char == "$":
-            temp_value = temp_value.replace(marker, "\\$")
-
     return temp_value
+
+
+def _escape_literal(value: str) -> str:
+    """
+    Escape a value for use inside single quotes (everything is literal).
+
+    The only character that needs handling inside single quotes is the
+    single quote itself, via the 'close-escape-reopen' trick.
+    """
+    return value.replace("'", "'\\''")
+
+
+def escape_shell_value(value: str, interpolate: bool = True) -> str:
+    r"""
+    Escape a value for use in a shell script.
+
+    Args:
+        value: The value to escape.
+        interpolate: When True (default), preserve $VAR / ${VAR} references so
+            the shell expands them at runtime (value goes inside double quotes).
+            When False, treat the entire value as literal — no shell expansion
+            occurs (value goes inside single quotes). Use interpolate=False
+            whenever the value contains a literal $ that should not be expanded.
+
+    Returns:
+        Escaped value ready to be wrapped in the appropriate quote style.
+        The quoting character is chosen automatically by ``generate_load_script``.
+    """
+    if interpolate:
+        return _escape_interpolated(value)
+    return _escape_literal(value)

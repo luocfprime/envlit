@@ -128,9 +128,17 @@ eul                   # Restores to "7" (user's value, not "0")
 
 ```yaml
 env:
-  PRICE: "Costs {{DOLLAR}}100"     # Literal $
-  PATH: "${HOME}/bin"               # Variable expansion
-  CMD: "Use `ls` command"           # Backticks auto-escaped
+  # Variable expansion (default, interpolate: true)
+  PATH: "${HOME}/bin"
+
+  # Literal $ — use interpolate: false
+  PRICE:
+    op: set
+    value: "$100"
+    interpolate: false
+
+  # Backticks are auto-escaped
+  CMD: "Use `ls` command"
 ```
 
 ## Common Patterns

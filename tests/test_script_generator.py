@@ -2,6 +2,8 @@
 Tests for script generation functionality.
 """
 
+import pytest
+
 from envlit.script_generator import generate_load_script, generate_unload_script
 
 
@@ -231,6 +233,36 @@ class TestScriptGenerator:
         assert "DOLLAR" in script
 
 
+class TestVariableNameValidation:
+    """Test that invalid env var names are rejected."""
+
+    def test_invalid_name_with_hyphen(self):
+        config = {"env": {"MY-VAR": "value"}, "flags": {}, "hooks": {}}
+        with pytest.raises(ValueError, match="Invalid environment variable name"):
+            generate_load_script(config)
+
+    def test_invalid_name_starts_with_digit(self):
+        config = {"env": {"1VAR": "value"}, "flags": {}, "hooks": {}}
+        with pytest.raises(ValueError, match="Invalid environment variable name"):
+            generate_load_script(config)
+
+    def test_invalid_name_with_space(self):
+        config = {"env": {"MY VAR": "value"}, "flags": {}, "hooks": {}}
+        with pytest.raises(ValueError, match="Invalid environment variable name"):
+            generate_load_script(config)
+
+    def test_valid_names_accepted(self):
+        config = {
+            "env": {"_PRIVATE": "a", "MY_VAR": "b", "VAR123": "c"},
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert "export _PRIVATE" in script
+        assert "export MY_VAR" in script
+        assert "export VAR123" in script
+
+
 class TestEscapeShellValue:
     """Test cases for escape_shell_value function."""
 
@@ -351,37 +383,103 @@ class TestEscapeShellValue:
         result = escape_shell_value('${HOME}/path\\with "quotes" and `backticks` and $100')
         assert result == '${HOME}/path\\\\with \\"quotes\\" and \\`backticks\\` and \\$100'
 
-    def test_dollar_placeholder(self):
-        """Test {{DOLLAR}} placeholder for literal dollar sign."""
+    def test_dollar_placeholder_no_longer_special(self):
+        """{{DOLLAR}} is no longer supported; passes through as literal text."""
         from envlit.script_generator import escape_shell_value
 
-        result = escape_shell_value("Price: {{DOLLAR}}100")
-        assert result == "Price: \\$100"
+        result = escape_shell_value("{{DOLLAR}}100")
+        assert result == "{{DOLLAR}}100"
 
-    def test_dollar_placeholder_multiple(self):
-        """Test multiple {{DOLLAR}} placeholders."""
+    def test_interpolate_false_literal_dollar(self):
+        """interpolate=False: dollar signs are literal, no escaping needed."""
         from envlit.script_generator import escape_shell_value
 
-        result = escape_shell_value("{{DOLLAR}}10 and {{DOLLAR}}20")
-        assert result == "\\$10 and \\$20"
+        result = escape_shell_value("price is $100", interpolate=False)
+        assert result == "price is $100"
 
-    def test_dollar_placeholder_with_variables(self):
-        """Test {{DOLLAR}} placeholder mixed with variable references."""
+    def test_interpolate_false_single_quote_escape(self):
+        """interpolate=False: single quotes are escaped via close-escape-reopen."""
         from envlit.script_generator import escape_shell_value
 
-        result = escape_shell_value("Price: {{DOLLAR}}50, Path: ${HOME}")
-        assert result == "Price: \\$50, Path: ${HOME}"
+        result = escape_shell_value("it's a value", interpolate=False)
+        assert result == "it'\\''s a value"
 
-    def test_dollar_placeholder_with_special_chars(self):
-        """Test {{DOLLAR}} placeholder with other special characters."""
+    def test_interpolate_false_variable_not_preserved(self):
+        """interpolate=False: $VAR patterns are treated as literal text."""
         from envlit.script_generator import escape_shell_value
 
-        result = escape_shell_value('Value: {{DOLLAR}}100, Note: `literal backticks`, Quote: "test"')
-        assert result == 'Value: \\$100, Note: \\`literal backticks\\`, Quote: \\"test\\"'
+        result = escape_shell_value("${HOME}/bin", interpolate=False)
+        assert result == "${HOME}/bin"
 
-    def test_dollar_placeholder_complex(self):
-        """Test {{DOLLAR}} placeholder in complex scenario."""
+    def test_interpolate_true_default(self):
+        """interpolate=True is the default: $VAR is preserved."""
         from envlit.script_generator import escape_shell_value
 
-        result = escape_shell_value("{{DOLLAR}}JAVA_HOME is the variable name, actual value: ${JAVA_HOME}")
-        assert result == "\\$JAVA_HOME is the variable name, actual value: ${JAVA_HOME}"
+        result = escape_shell_value("${HOME}/bin")
+        assert result == "${HOME}/bin"
+
+
+class TestInterpolateField:
+    """Test interpolate field in generate_load_script."""
+
+    def test_interpolate_true_default_uses_double_quotes(self):
+        """Without interpolate field, variable references are preserved in double quotes."""
+        config = {
+            "env": {"PROJECT_ROOT": {"op": "set", "value": "${HOME}/projects"}},
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert 'export PROJECT_ROOT="${HOME}/projects"' in script
+
+    def test_interpolate_false_uses_single_quotes(self):
+        """interpolate: false produces single-quoted literal export."""
+        config = {
+            "env": {"API_KEY": {"op": "set", "value": "abc$xyz123", "interpolate": False}},
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert "export API_KEY='abc$xyz123'" in script
+
+    def test_interpolate_false_single_quote_in_value(self):
+        """interpolate: false escapes single quotes inside the value."""
+        config = {
+            "env": {"MSG": {"op": "set", "value": "it's fine", "interpolate": False}},
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert "export MSG='it'\\''s fine'" in script
+
+    def test_interpolate_true_explicit(self):
+        """Explicit interpolate: true behaves identically to the default."""
+        config = {
+            "env": {"PATH_ADD": {"op": "prepend", "value": "${HOME}/.local/bin", "interpolate": True}},
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert "${HOME}/.local/bin" in script
+        assert "'" not in script.split("PATH_ADD=")[1].split("\n")[0]
+
+    def test_interpolate_stripped_from_operation(self):
+        """The interpolate key is not passed to validate_operation (no error raised)."""
+        config = {
+            "env": {"FOO": {"op": "set", "value": "bar", "interpolate": False}},
+            "flags": {},
+            "hooks": {},
+        }
+        # Should not raise ValueError about unknown field
+        script = generate_load_script(config)
+        assert "export FOO='bar'" in script
+
+    def test_string_shorthand_always_interpolates(self):
+        """String shorthand always uses double quotes (interpolate: true implicitly)."""
+        config = {
+            "env": {"MYVAR": "${HOME}/data"},
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert 'export MYVAR="${HOME}/data"' in script

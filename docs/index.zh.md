@@ -157,10 +157,14 @@ env:
     - `$VAR` 或 `${VAR}` - 运行时扩展
     - `${VAR:-default}` - 带默认值
 
-    **字面美元符号**：使用占位符
+    **字面美元符号**：使用 `interpolate: false`
 
-    - `{{DOLLAR}}` - 变成字面 `$`
-    - 示例：`PRICE: "{{DOLLAR}}100"` → `$100`
+    ```yaml
+    PRICE:
+      op: set
+      value: "$100"
+      interpolate: false   # $ 不会被展开
+    ```
 
     **其他特殊字符**：
 
@@ -173,9 +177,9 @@ env:
 
     | 输入 (YAML) | 脚本中的输出 | Shell 解释 | 使用场景 |
     |--------------|------------------|------------------|----------|
-    | `$HOME` | `$HOME` | `/Users/you` | 变量扩展 |
-    | `${HOME}` | `${HOME}` | `/Users/you` | 变量扩展 |
-    | `{{DOLLAR}}100` | `\$100` | `$100` | 字面美元符号 |
+    | `$HOME` | `$HOME` | `/Users/you` | 变量扩展（interpolate: true） |
+    | `${HOME}` | `${HOME}` | `/Users/you` | 变量扩展（interpolate: true） |
+    | `$100`（interpolate: false） | `$100` | `$100` | 字面美元符号 |
     | `` `cmd` `` | `` \`cmd\` `` | `` `cmd` `` | 字面反引号 |
     | `"quoted"` | `\"quoted\"` | `"quoted"` | 转义引号 |
 

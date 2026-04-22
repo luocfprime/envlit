@@ -157,10 +157,14 @@ env:
     - `$VAR` or `${VAR}` - Expands at runtime
     - `${VAR:-default}` - With default value
 
-    **Literal Dollar Sign**: Use placeholder
+    **Literal Dollar Sign**: Use `interpolate: false`
 
-    - `{{DOLLAR}}` - Becomes literal `$`
-    - Example: `PRICE: "{{DOLLAR}}100"` → `$100`
+    ```yaml
+    PRICE:
+      op: set
+      value: "$100"
+      interpolate: false   # $ is not expanded
+    ```
 
     **Other Special Characters**:
 
@@ -173,9 +177,9 @@ env:
 
     | Input (YAML) | Output in Script | Shell Interprets | Use Case |
     |--------------|------------------|------------------|----------|
-    | `$HOME` | `$HOME` | `/Users/you` | Variable expansion |
-    | `${HOME}` | `${HOME}` | `/Users/you` | Variable expansion |
-    | `{{DOLLAR}}100` | `\$100` | `$100` | Literal dollar |
+    | `$HOME` | `$HOME` | `/Users/you` | Variable expansion (interpolate: true) |
+    | `${HOME}` | `${HOME}` | `/Users/you` | Variable expansion (interpolate: true) |
+    | `$100` (interpolate: false) | `$100` | `$100` | Literal dollar |
     | `` `cmd` `` | `` \`cmd\` `` | `` `cmd` `` | Literal backtick |
     | `"quoted"` | `\"quoted\"` | `"quoted"` | Escaped quotes |
 

@@ -107,25 +107,27 @@ class DynamicFlagCommand(click.Command):
         # Find config file
         config_path = Path(config_path_str) if config_path_str else find_config_file(profile)
 
-        # Load config and add dynamic flag options
+        # Load config, add dynamic flag options, and cache for the load() callback
         if config_path and config_path.is_file():
             try:
                 config_dict = load_config(str(config_path))
 
+                # Cache so load() doesn't need to call load_config() again
+                ctx.ensure_object(dict)
+                ctx.obj["_preloaded_config"] = config_dict
+                ctx.obj["_preloaded_config_path"] = str(config_path)
+
                 if "flags" in config_dict:
                     for flag_name, flag_config in config_dict["flags"].items():
-                        # Check if already exists
                         if any(p.name == flag_name for p in self.params):
                             continue
 
-                        # Get flag aliases
                         flag_aliases = flag_config.get("flag", [f"--{flag_name}"])
                         if isinstance(flag_aliases, str):
                             flag_aliases = [flag_aliases]
                         default_value = flag_config.get("default", None)
                         target = flag_config.get("target", flag_name.upper())
 
-                        # Add option to command
                         option = click.Option(
                             param_decls=[*flag_aliases, flag_name],
                             default=default_value,
@@ -140,9 +142,10 @@ class DynamicFlagCommand(click.Command):
 
 
 @cli.command(cls=DynamicFlagCommand)
+@click.pass_context
 @click.argument("profile", required=False)
 @click.option("--config", "-c", type=click.Path(exists=True), help="Path to config file")
-def load(profile: str | None, config: str | None, **kwargs):  # noqa: C901
+def load(ctx: click.Context, profile: str | None, config: str | None, **kwargs):  # noqa: C901
     """Generate shell script to load environment configuration.
 
     \b
@@ -172,16 +175,20 @@ def load(profile: str | None, config: str | None, **kwargs):  # noqa: C901
                 sys.exit(1)
             config_path = found_path
 
-        # Load configuration
-        try:
-            config_dict = load_config(str(config_path))
-        except FileNotFoundError:
-            click.echo(f"Error: Config file not found: {config_path}", err=True)
-            sys.exit(1)
-        except Exception as e:
-            click.echo(f"Error parsing config file '{config_path}':", err=True)
-            click.echo(f"  {type(e).__name__}: {e}", err=True)
-            sys.exit(1)
+        # Use pre-loaded config from parse_args if available for the same path
+        preloaded = ctx.obj or {}
+        if preloaded.get("_preloaded_config_path") == str(config_path):
+            config_dict = preloaded["_preloaded_config"]
+        else:
+            try:
+                config_dict = load_config(str(config_path))
+            except FileNotFoundError:
+                click.echo(f"Error: Config file not found: {config_path}", err=True)
+                sys.exit(1)
+            except Exception as e:
+                click.echo(f"Error parsing config file '{config_path}':", err=True)
+                click.echo(f"  {type(e).__name__}: {e}", err=True)
+                sys.exit(1)
 
         # Validate config structure
         if not isinstance(config_dict, dict):
