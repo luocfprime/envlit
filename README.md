@@ -87,8 +87,6 @@ echo $DEBUG              # Output: (empty - variable restored to original state)
 > /plugin install envlit-skill@envlit
 > ```
 > Or copy [`skills/envlit/SKILL.md`](skills/envlit/SKILL.md) to `~/.claude/skills/envlit/SKILL.md`
->
-> **OpenCode** — copy [`skills/envlit/SKILL.md`](skills/envlit/SKILL.md) to `.opencode/skills/envlit/SKILL.md`
 
 ## Documentation
 
