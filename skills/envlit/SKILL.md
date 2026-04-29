@@ -83,29 +83,26 @@ Config files live in a `.envlit/` directory in your project root.
 # Optional: inherit from another profile
 extends: "./base.yaml"
 
-# Dynamic CLI flags (added to `el` as --<name> options at runtime)
-flags:
-  cuda:
-    flag: ["--cuda", "-g"]       # CLI option names (list of strings)
-    default: "0"                  # default value if flag not passed
-    target: "CUDA_VISIBLE_DEVICES"  # env var to set
-
-  backend:
-    flag: ["--backend", "-b"]
-    default: "c"
-    target: "ML_COMPUTE_BACKEND"
-    map:                          # map flag values to env var values
-      c: "CPU"
-      g: "GPU"
-      t: "TPU"
-
 # Environment variables
 env:
   # 1. String shorthand — equivalent to op: set
   DEBUG: "true"
   API_URL: "https://api.example.com"
 
-  # 2. Single operation (dict syntax)
+  # 2. Inline flag — CLI option defined alongside the variable it controls
+  CUDA_VISIBLE_DEVICES:
+    flag: ["--cuda", "-g"]   # CLI option names (list of strings)
+    default: "0"              # value used when flag is not passed
+
+  ML_COMPUTE_BACKEND:
+    flag: ["--backend", "-b"]
+    default: "c"
+    map:                      # map CLI input → env var value
+      c: "CPU"
+      g: "GPU"
+      t: "TPU"
+
+  # 3. Single operation (dict syntax)
   PYTHONPATH:
     op: prepend
     value: "./src"
@@ -113,7 +110,7 @@ env:
   OLD_VAR:
     op: unset
 
-  # 3. Operation pipeline (list)
+  # 4. Operation pipeline (list)
   PATH:
     - op: remove
       value: "/deprecated/bin"
@@ -227,19 +224,18 @@ env:
 
 ## Dynamic Flags
 
-Flags declared in `flags:` become real CLI options on the `el` command:
+Flags are defined **inline inside `env:`** entries. The variable name is the key; add a `flag:` field to make it a CLI option:
 
 ```yaml
 # .envlit/dev.yaml
-flags:
-  cuda:
+env:
+  CUDA_VISIBLE_DEVICES:
     flag: ["--cuda", "-g"]
     default: "0"
-    target: "CUDA_VISIBLE_DEVICES"
-  backend:
+
+  ML_COMPUTE_BACKEND:
     flag: ["--backend", "-b"]
     default: "c"
-    target: "ML_COMPUTE_BACKEND"
     map:
       c: "CPU"
       g: "GPU"
@@ -253,11 +249,12 @@ el dev -g 0,1 -b g         # CUDA_VISIBLE_DEVICES=0,1, ML_COMPUTE_BACKEND=GPU
 el dev --help              # Shows all flags including --cuda and --backend
 ```
 
-Flag fields:
-- `flag` — CLI option name(s): a single string (`"--cuda"`) or list (`["--cuda", "-g"]`). If omitted, defaults to `--<flag_name>` (e.g., a flag named `port` becomes `--port`)
-- `default` — default string value used when the flag is **not** passed on the CLI. A value passed on the CLI always overrides the default (e.g., `el dev --cuda 2` sets `CUDA_VISIBLE_DEVICES=2` regardless of `default: "0"`)
-- `target` — name of the environment variable to set. If omitted, defaults to `FLAG_NAME.upper()` (e.g., flag `port` → `PORT`)
-- `map` (optional) — dict mapping flag input → env var value. If the user passes a value **not** in the map, the raw flag value is used directly as the env var value (no error).
+Inline flag fields (all inside the `env:` entry):
+- `flag` — CLI option name(s): a single string (`"--cuda"`) or list (`["--cuda", "-g"]`)
+- `default` — value used when the flag is **not** passed on the CLI. A value passed on the CLI always overrides the default.
+- `map` (optional) — dict mapping CLI input → env var value. Unknown values are passed through as-is (no error).
+
+> **Deprecated**: The top-level `flags:` section (with `target:` field) still works but emits a deprecation warning. Migrate flags into `env:` entries as shown above.
 
 ---
 
@@ -361,7 +358,7 @@ env:
 |---------|-------------|-----|
 | `el: command not found` | Shell not initialized | Add `eval "$(envlit init)"` to `.bashrc`/`.zshrc`, then `source ~/.zshrc` |
 | Config not loading | Wrong filename | File must be `.envlit/<profile>.yaml` (or `.yml`), in the current directory |
-| Dynamic flags missing from `--help` | YAML syntax error in `flags:` | Check indentation; run `envlit doctor` |
+| Dynamic flags missing from `--help` | YAML syntax error in `env:` flag entry | Check indentation; `flag:` must be inside an `env:` entry; run `envlit doctor` |
 | Variables not restored after `eul` | Different shell session | `eul` only works in the shell that ran `el` |
 | `Invalid environment variable name` | Hyphen/space in YAML key | Rename key to match `[a-zA-Z_][a-zA-Z0-9_]*` |
 | Hook not running | Wrong key name | Hook keys are `pre_load`, `post_load`, `pre_unload`, `post_unload` (underscore) |
@@ -375,7 +372,7 @@ Run `envlit doctor` for automated diagnosis.
 1. **New setup** → guide through `pip install envlit`, `eval "$(envlit init)"`, create `.envlit/default.yaml`
 2. **YAML errors** → check hook key names (underscores), flag field names (`flag`/`target`/`map`), valid env var names
 3. **State confusion** → explain CAS algorithm; `eul` only works in same shell session
-4. **Flags not working** → verify `flag` is a list, `target` matches exact env var name, `map` keys match what user passes on CLI
+4. **Flags not working** → use inline flag syntax in `env:` (not deprecated top-level `flags:`); verify `flag` is a list, `map` keys match what user passes on CLI
 5. **PATH operations** → use pipeline syntax (list of dicts); `separator` defaults to `:`
 
 ---

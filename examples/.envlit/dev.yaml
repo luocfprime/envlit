@@ -2,24 +2,21 @@
 
 extends: ./base.yaml
 
-# Smart flags for dynamic configuration
-flags:
-  cuda:
+# Environment variables
+env:
+  # Inline flags — CLI overrides defined alongside the variable they control
+  CUDA_VISIBLE_DEVICES:
     flag: ["--cuda", "-g"]
     default: "0"
-    target: "CUDA_VISIBLE_DEVICES"
 
-  backend:
+  ML_COMPUTE_BACKEND:
     flag: ["--backend", "-b"]
     default: "c"
-    target: "ML_COMPUTE_BACKEND"
     map:
       c: "CPU"
       g: "GPU"
       t: "TPU"
 
-# Environment variables
-env:
   # Simple string values (shortcut for 'op: set')
   PROJECT_MODE: "Development"
   DEBUG: "true"

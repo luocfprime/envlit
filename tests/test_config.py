@@ -217,3 +217,42 @@ hooks:
         config_file.write_text("invalid: yaml: content:")
         with pytest.raises(yaml.YAMLError):  # YAML parsing error
             load_config(str(config_file))
+
+    def test_flags_section_emits_deprecation_warning(self, tmp_path):
+        config_file = tmp_path / "flagged.yaml"
+        config_file.write_text("""
+flags:
+  cuda:
+    flag: "--cuda"
+    default: "0"
+    target: "CUDA_VISIBLE_DEVICES"
+""")
+        with pytest.warns(DeprecationWarning, match="flags.*deprecated"):
+            load_config(str(config_file))
+
+    def test_no_deprecation_warning_for_inline_flags(self, tmp_path):
+        config_file = tmp_path / "inline.yaml"
+        config_file.write_text("""
+env:
+  CUDA_VISIBLE_DEVICES:
+    flag: ["--cuda", "-g"]
+    default: "0"
+""")
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            load_config(str(config_file))  # should not raise
+
+    def test_empty_flags_section_no_warning(self, tmp_path):
+        config_file = tmp_path / "empty_flags.yaml"
+        config_file.write_text("""
+env:
+  MY_VAR: "value"
+flags: {}
+""")
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            load_config(str(config_file))  # should not raise

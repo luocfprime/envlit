@@ -483,3 +483,111 @@ class TestInterpolateField:
         }
         script = generate_load_script(config)
         assert 'export MYVAR="${HOME}/data"' in script
+
+
+class TestInlineFlags:
+    """Tests for inline flag definitions inside the env: section."""
+
+    def test_inline_flag_uses_default(self):
+        config = {
+            "env": {
+                "BACKEND": {"flag": ["--backend", "-b"], "default": "cpu"},
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert 'export BACKEND="cpu"' in script
+
+    def test_inline_flag_cli_override(self):
+        config = {
+            "env": {
+                "BACKEND": {"flag": ["--backend", "-b"], "default": "cpu"},
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config, flag_overrides={"backend": "gpu"})
+        assert 'export BACKEND="gpu"' in script
+
+    def test_inline_flag_with_map_default(self):
+        config = {
+            "env": {
+                "ML_COMPUTE_BACKEND": {
+                    "flag": ["--backend", "-b"],
+                    "default": "c",
+                    "map": {"c": "CPU", "g": "GPU", "t": "TPU"},
+                },
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert 'export ML_COMPUTE_BACKEND="CPU"' in script
+
+    def test_inline_flag_with_map_cli_override(self):
+        config = {
+            "env": {
+                "ML_COMPUTE_BACKEND": {
+                    "flag": ["--backend", "-b"],
+                    "default": "c",
+                    "map": {"c": "CPU", "g": "GPU", "t": "TPU"},
+                },
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config, flag_overrides={"ml_compute_backend": "g"})
+        assert 'export ML_COMPUTE_BACKEND="GPU"' in script
+
+    def test_inline_flag_cli_value_not_in_map_passes_through(self):
+        config = {
+            "env": {
+                "MODE": {
+                    "flag": ["--mode"],
+                    "default": "a",
+                    "map": {"a": "AAA"},
+                },
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config, flag_overrides={"mode": "unknown"})
+        assert 'export MODE="unknown"' in script
+
+    def test_inline_flag_no_default_no_cli_skips_var(self):
+        config = {
+            "env": {
+                "OPTIONAL_VAR": {"flag": ["--opt"]},
+                "ALWAYS_SET": "present",
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert "OPTIONAL_VAR" not in script
+        assert 'export ALWAYS_SET="present"' in script
+
+    def test_inline_flag_no_default_cli_provided(self):
+        config = {
+            "env": {
+                "OPTIONAL_VAR": {"flag": ["--opt"]},
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config, flag_overrides={"optional_var": "yes"})
+        assert 'export OPTIONAL_VAR="yes"' in script
+
+    def test_inline_and_regular_env_vars_coexist(self):
+        config = {
+            "env": {
+                "REGULAR": "value",
+                "FLAGGED": {"flag": ["--flagged"], "default": "default_val"},
+            },
+            "flags": {},
+            "hooks": {},
+        }
+        script = generate_load_script(config)
+        assert 'export REGULAR="value"' in script
+        assert 'export FLAGGED="default_val"' in script

@@ -3,6 +3,7 @@ Configuration parsing and management.
 Handles YAML config loading with inheritance support.
 """
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,14 @@ def load_config(config_path: str) -> dict[str, Any]:
         config["flags"] = {}
     if "hooks" not in config:
         config["hooks"] = {}
+
+    if config.get("flags"):
+        warnings.warn(
+            "The top-level 'flags:' section is deprecated. "
+            "Define flags inline inside 'env:' entries using the 'flag:' key instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     # Handle inheritance
     if "extends" in config:

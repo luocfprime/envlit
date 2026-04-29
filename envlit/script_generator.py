@@ -13,6 +13,30 @@ from envlit.operations import apply_operations, normalize_env_value, validate_op
 _VALID_VAR_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
+def _is_inline_flag(var_value: Any) -> bool:
+    return isinstance(var_value, dict) and "flag" in var_value
+
+
+def _resolve_inline_flag(
+    var_value: dict[str, Any],
+    flag_overrides: dict[str, str] | None,
+    var_name: str,
+) -> str | None:
+    """Return the resolved string value for an inline flag entry, or None to skip."""
+    cli_value = (flag_overrides or {}).get(var_name.lower())
+    flag_map = var_value.get("map", {})
+    default = var_value.get("default")
+
+    if cli_value is not None:
+        raw = cli_value
+    elif default is not None:
+        raw = str(default)
+    else:
+        return None
+
+    return flag_map.get(raw, raw) if flag_map else raw
+
+
 def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] | None = None) -> str:  # noqa: C901
     """
     Generate a shell script to load an environment configuration.
@@ -50,17 +74,27 @@ def generate_load_script(config: dict[str, Any], flag_overrides: dict[str, str] 
     lines.append("# Environment variables")
     env_section = dict(config.get("env", {}))
 
-    # Apply flag overrides first
+    # Resolve inline flags (new-style: flag: key inside env entry)
+    resolved_env: dict[str, Any] = {}
+    for var_name, var_value in env_section.items():
+        if _is_inline_flag(var_value):
+            resolved = _resolve_inline_flag(var_value, flag_overrides, var_name)
+            if resolved is not None:
+                resolved_env[var_name] = resolved
+            # else: no CLI value and no default → skip this var
+        else:
+            resolved_env[var_name] = var_value
+    env_section = resolved_env
+
+    # Apply old-style flag overrides (flags: section with target:) — backward compat
     if flag_overrides:
         for flag_name, flag_value in flag_overrides.items():
             if "flags" in config and flag_name in config["flags"]:
                 flag_config = config["flags"][flag_name]
                 target_var = flag_config.get("target")
                 if target_var:
-                    # Check if there's a value mapping
                     if "map" in flag_config and flag_value in flag_config["map"]:
-                        mapped_value = flag_config["map"][flag_value]
-                        env_section[target_var] = mapped_value
+                        env_section[target_var] = flag_config["map"][flag_value]
                     else:
                         env_section[target_var] = flag_value
 

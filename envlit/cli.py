@@ -100,40 +100,62 @@ class DynamicFlagCommand(click.Command):
 
         return profile, config_path_str
 
+    def _register_legacy_flags(self, config_dict: dict) -> None:
+        """Add Click options from the deprecated top-level flags: section."""
+        for flag_name, flag_config in config_dict.get("flags", {}).items():
+            if any(p.name == flag_name for p in self.params):
+                continue
+            flag_aliases = flag_config.get("flag", [f"--{flag_name}"])
+            if isinstance(flag_aliases, str):
+                flag_aliases = [flag_aliases]
+            default_value = flag_config.get("default", None)
+            target = flag_config.get("target", flag_name.upper())
+            self.params.append(
+                click.Option(
+                    param_decls=[*flag_aliases, flag_name],
+                    default=default_value,
+                    help=f"Set {target} (default: {default_value})",
+                )
+            )
+
+    def _register_inline_flags(self, config_dict: dict) -> None:
+        """Add Click options from inline flag: entries inside env: section."""
+        for var_name, var_value in config_dict.get("env", {}).items():
+            if not isinstance(var_value, dict) or "flag" not in var_value:
+                continue
+            param_name = var_name.lower()
+            if any(p.name == param_name for p in self.params):
+                continue
+            flag_aliases = var_value.get("flag", [])
+            if isinstance(flag_aliases, str):
+                flag_aliases = [flag_aliases]
+            if not flag_aliases:
+                continue
+            default_value = var_value.get("default", None)
+            self.params.append(
+                click.Option(
+                    param_decls=[*flag_aliases, param_name],
+                    default=default_value,
+                    help=f"Set {var_name} (default: {default_value})",
+                )
+            )
+
     def parse_args(self, ctx: click.Context, args: list):
         """Override parse_args to add dynamic options before argument parsing."""
         profile, config_path_str = self._parse_for_profile_and_config(args)
 
-        # Find config file
         config_path = Path(config_path_str) if config_path_str else find_config_file(profile)
 
-        # Load config, add dynamic flag options, and cache for the load() callback
         if config_path and config_path.is_file():
             try:
                 config_dict = load_config(str(config_path))
 
-                # Cache so load() doesn't need to call load_config() again
                 ctx.ensure_object(dict)
                 ctx.obj["_preloaded_config"] = config_dict
                 ctx.obj["_preloaded_config_path"] = str(config_path)
 
-                if "flags" in config_dict:
-                    for flag_name, flag_config in config_dict["flags"].items():
-                        if any(p.name == flag_name for p in self.params):
-                            continue
-
-                        flag_aliases = flag_config.get("flag", [f"--{flag_name}"])
-                        if isinstance(flag_aliases, str):
-                            flag_aliases = [flag_aliases]
-                        default_value = flag_config.get("default", None)
-                        target = flag_config.get("target", flag_name.upper())
-
-                        option = click.Option(
-                            param_decls=[*flag_aliases, flag_name],
-                            default=default_value,
-                            help=f"Set {target} (default: {default_value})",
-                        )
-                        self.params.append(option)
+                self._register_legacy_flags(config_dict)
+                self._register_inline_flags(config_dict)
             except Exception as e:
                 click.echo(f"Error loading config for dynamic flags: {e}", err=True)
                 sys.exit(1)
@@ -201,6 +223,13 @@ def load(ctx: click.Context, profile: str | None, config: str | None, **kwargs):
             for flag_name in config_dict["flags"]:
                 if flag_name in kwargs and kwargs[flag_name] is not None:
                     flag_values[flag_name] = kwargs[flag_name]
+
+        for var_name, var_value in config_dict.get("env", {}).items():
+            if not isinstance(var_value, dict) or "flag" not in var_value:
+                continue
+            param_name = var_name.lower()
+            if param_name in kwargs and kwargs[param_name] is not None:
+                flag_values[param_name] = kwargs[param_name]
 
         # Generate shell script
         try:
