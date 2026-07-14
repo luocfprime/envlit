@@ -2,10 +2,14 @@
 Tests for CLI commands: find_config_file, load error paths, doctor.
 """
 
+import os
+import subprocess
+
 import pytest
 from click.testing import CliRunner
 
 from envlit.cli import cli, find_config_file
+from envlit.script_generator import generate_unload_script
 
 # ---------------------------------------------------------------------------
 # find_config_file
@@ -113,6 +117,88 @@ class TestLoadErrors:
         result = runner.invoke(cli, ["load", "--config", str(cfg)])
         assert result.exit_code == 0
         assert 'export FOO="bar"' in result.output
+
+
+class TestDotenvCLI:
+    @pytest.fixture
+    def runner(self):
+        return CliRunner()
+
+    def test_override_warning_uses_stderr_and_stdout_remains_sourceable(self, runner, tmp_path):
+        dotenv_file = tmp_path / ".env"
+        dotenv_file.write_text("SHARED=dotenv-secret\n")
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\nenv:\n  SHARED: yaml-secret\n')
+
+        result = runner.invoke(cli, ["load", "--config", str(config_file)])
+
+        assert result.exit_code == 0
+        assert result.stdout.startswith("#!/bin/bash")
+        assert 'export SHARED="yaml-secret"' in result.stdout
+        assert "ConfigOverrideWarning" not in result.stdout
+        assert "ConfigOverrideWarning" in result.stderr
+        assert "SHARED" in result.stderr
+        assert "dotenv-secret" not in result.stderr
+        assert "yaml-secret" not in result.stderr
+
+    @pytest.mark.parametrize("dotenv_content", [None, 'BROKEN="unterminated\n'])
+    def test_missing_or_malformed_dotenv_emits_no_script(self, runner, tmp_path, dotenv_content):
+        if dotenv_content is not None:
+            (tmp_path / ".env").write_text(dotenv_content)
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\n')
+
+        result = runner.invoke(cli, ["load", "--config", str(config_file)])
+
+        assert result.exit_code != 0
+        assert "#!/bin/bash" not in result.stdout
+        assert str(config_file.resolve()) in result.stderr
+        assert str((tmp_path / ".env").resolve()) in result.stderr
+
+    def test_invalid_dotenv_variable_emits_no_script(self, runner, tmp_path):
+        (tmp_path / ".env").write_text("BAD-NAME=value\n")
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\n')
+
+        result = runner.invoke(cli, ["load", "--config", str(config_file)])
+
+        assert result.exit_code != 0
+        assert "#!/bin/bash" not in result.stdout
+        assert "BAD-NAME" in result.stderr
+
+    def test_dotenv_generated_script_loads_and_restores_environment(self, runner, tmp_path):
+        (tmp_path / ".env").write_text("RESTORE_ME=loaded\nNEW_FROM_DOTENV=new\n")
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\n')
+        result = runner.invoke(cli, ["load", "--config", str(config_file)])
+        assert result.exit_code == 0
+
+        load_script = tmp_path / "load.sh"
+        unload_script = tmp_path / "unload.sh"
+        load_script.write_text(result.stdout)
+        unload_script.write_text(generate_unload_script({}))
+        environment = os.environ.copy()
+        environment["RESTORE_ME"] = "before"
+        environment.pop("NEW_FROM_DOTENV", None)
+
+        completed = subprocess.run(  # noqa: S603 - fixed executable and generated local fixtures
+            [
+                "/bin/bash",
+                "-c",
+                'set -e; source "$1"; '
+                'test "$RESTORE_ME" = loaded; test "$NEW_FROM_DOTENV" = new; '
+                'source "$2"; test "$RESTORE_ME" = before; test -z "${NEW_FROM_DOTENV+x}"',
+                "bash",
+                str(load_script),
+                str(unload_script),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert completed.returncode == 0, completed.stderr
 
 
 # ---------------------------------------------------------------------------
