@@ -43,7 +43,8 @@ flags:
       torch: "PYTORCH_V2_OPTIMIZED"
       tf: "TENSORFLOW_LEGACY"
 """)
-        config = load_config(str(config_file))
+        with pytest.warns(DeprecationWarning):
+            config = load_config(str(config_file))
         assert "cuda" in config["flags"]
         assert config["flags"]["cuda"]["default"] == "0"
         assert config["flags"]["backend"]["map"]["torch"] == "PYTORCH_V2_OPTIMIZED"
@@ -122,7 +123,8 @@ env:
   SHARED_VAR: "derived_value"
 """)
 
-        config = load_config(str(derived_file))
+        with pytest.warns(config_module.ConfigOverrideWarning, match="SHARED_VAR"):
+            config = load_config(str(derived_file))
         assert config["env"]["BASE_VAR"] == "from_base"
         assert config["env"]["DERIVED_VAR"] == "from_derived"
         # Derived should override base
@@ -168,7 +170,8 @@ flags:
     target: "ML_COMPUTE_BACKEND"
 """)
 
-        config = load_config(str(derived_file))
+        with pytest.warns(DeprecationWarning):
+            config = load_config(str(derived_file))
         assert "cuda" in config["flags"]
         assert "backend" in config["flags"]
 
