@@ -24,10 +24,16 @@ eval "$(envlit init)"
 Create a config file at `.envlit/default.yaml`:
 
 ```yaml
+dotenv:
+  - "./.env"
+  - "./.env.local"
+
 env:
   PROJECT_MODE: "Development"
   DEBUG: "true"
 ```
+
+Dotenv paths are relative to the YAML file. Later dotenv files override earlier ones with a warning, and `env:` overrides dotenv values last. Declared files are required; envlit never auto-discovers `.env` files.
 
 Load and unload environment variables:
 
@@ -48,6 +54,7 @@ echo $DEBUG              # Output: (empty - variable restored to original state)
 - **Path operations** - Prepend, append, remove path entries
 - **Lifecycle hooks** - Run scripts before/after load/unload
 - **Config inheritance** - Extend base configurations
+- **Explicit dotenv imports** - Load one or more `.env` files with deterministic precedence
 
 ## Comparison with Similar Tools
 

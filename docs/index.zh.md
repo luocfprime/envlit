@@ -27,6 +27,8 @@ eval "$(envlit init)"
 在 `.envlit/default.yaml` 创建配置文件：
 
 ```yaml
+dotenv: "./.env"
+
 env:
   PROJECT_MODE: "Development"
   DEBUG: "true"
@@ -58,6 +60,21 @@ eul                       # 卸载: 恢复原始 DEBUG，保留 CUSTOM_VAR
 ```
 
 envlit 仅恢复它管理的变量，保留您的手动更改。
+
+### Dotenv 文件导入
+
+可以在配置中显式导入一个或多个 dotenv 文件：
+
+```yaml
+dotenv:
+  - "./.env"
+  - "./.env.local"
+
+env:
+  DEBUG: "true"
+```
+
+路径相对于声明它的 YAML 文件解析。优先级依次为：父配置、按列表顺序加载的 dotenv 文件、当前 YAML 的 `env:`。每次跨来源覆盖都会向 stderr 输出 warning，但不会打印任何变量值。声明的文件必须存在；envlit 不会自动发现或加载 `.env` 文件。
 
 ### 动态标志
 在 YAML 中定义短 CLI 标志，映射到长环境变量名称和值。减少输入负担：
