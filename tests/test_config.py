@@ -262,6 +262,15 @@ flags: {}
 
 
 class TestDotenvLoading:
+    def test_does_not_auto_discover_dotenv(self, tmp_path):
+        (tmp_path / ".env").write_text("NOT_DECLARED=value\n")
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text("env:\n  DECLARED: value\n")
+
+        config = load_config(str(config_file))
+
+        assert config["env"] == {"DECLARED": "value"}
+
     def test_loads_single_dotenv_relative_to_config(self, tmp_path):
         (tmp_path / ".env").write_text("API_URL=https://example.test\nEMPTY=\n")
         config_file = tmp_path / "default.yaml"
@@ -280,6 +289,16 @@ class TestDotenvLoading:
         config = load_config(str(config_file))
 
         assert config["env"]["BIN"] == "${HOME}/bin"
+
+    def test_parses_escaped_and_literal_multiline_dotenv_values(self, tmp_path):
+        (tmp_path / ".env").write_text('ESCAPED="first\\nsecond"\nLITERAL="third\nfourth"\n')
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\n')
+
+        config = load_config(str(config_file))
+
+        assert config["env"]["ESCAPED"] == "first\nsecond"
+        assert config["env"]["LITERAL"] == "third\nfourth"
 
     def test_empty_dotenv_list_loads_nothing(self, tmp_path):
         config_file = tmp_path / "default.yaml"

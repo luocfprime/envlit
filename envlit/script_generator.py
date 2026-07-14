@@ -225,15 +225,13 @@ def _escape_interpolated(value: str) -> str:
     )
     temp_value = VAR_PATTERN.sub(replace_var, value)
 
-    # Step 2: Escape characters that are special inside double quotes.
-    # Note: real newlines (\x0a) become the two-char sequence \n here, which bash
-    # does NOT interpret as a newline inside double quotes. Use interpolate: false
-    # (single-quote mode) if the value contains literal newlines.
+    # Step 2: Escape characters that are special inside double quotes. Literal
+    # newlines are valid inside a double-quoted shell assignment and must remain
+    # unchanged so multiline values round-trip exactly.
     temp_value = temp_value.replace("\\", "\\\\")
     temp_value = temp_value.replace("$", "\\$")
     temp_value = temp_value.replace("`", "\\`")
     temp_value = temp_value.replace('"', '\\"')
-    temp_value = temp_value.replace("\n", "\\n")
 
     # Step 3: Restore variable references verbatim
     for placeholder, original in var_refs.items():

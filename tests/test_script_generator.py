@@ -302,11 +302,11 @@ class TestEscapeShellValue:
         assert result == "value with \\`command\\`"
 
     def test_string_with_newline(self):
-        """Test escaping string with newlines."""
+        """Literal newlines remain literal inside a double-quoted assignment."""
         from envlit.script_generator import escape_shell_value
 
         result = escape_shell_value("line1\nline2")
-        assert result == "line1\\nline2"
+        assert result == "line1\nline2"
 
     def test_preserve_simple_variable(self):
         """Test that simple $VAR references are preserved."""

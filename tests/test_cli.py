@@ -9,7 +9,6 @@ import pytest
 from click.testing import CliRunner
 
 from envlit.cli import cli, find_config_file
-from envlit.script_generator import generate_unload_script
 
 # ---------------------------------------------------------------------------
 # find_config_file
@@ -141,6 +140,19 @@ class TestDotenvCLI:
         assert "dotenv-secret" not in result.stderr
         assert "yaml-secret" not in result.stderr
 
+    def test_key_without_equals_warning_uses_only_stderr(self, runner, tmp_path):
+        (tmp_path / ".env").write_text("IGNORED\nKEPT=value\n")
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\n')
+
+        result = runner.invoke(cli, ["load", "--config", str(config_file)])
+
+        assert result.exit_code == 0
+        assert "ConfigDotenvWarning" in result.stderr
+        assert "IGNORED" in result.stderr
+        assert "ConfigDotenvWarning" not in result.stdout
+        assert "IGNORED" not in result.stdout
+
     @pytest.mark.parametrize("dotenv_content", [None, 'BROKEN="unterminated\n'])
     def test_missing_or_malformed_dotenv_emits_no_script(self, runner, tmp_path, dotenv_content):
         if dotenv_content is not None:
@@ -172,11 +184,13 @@ class TestDotenvCLI:
         config_file.write_text('dotenv: "./.env"\n')
         result = runner.invoke(cli, ["load", "--config", str(config_file)])
         assert result.exit_code == 0
+        unload_result = runner.invoke(cli, ["unload", "--config", str(config_file)])
+        assert unload_result.exit_code == 0
 
         load_script = tmp_path / "load.sh"
         unload_script = tmp_path / "unload.sh"
         load_script.write_text(result.stdout)
-        unload_script.write_text(generate_unload_script({}))
+        unload_script.write_text(unload_result.stdout)
         environment = os.environ.copy()
         environment["RESTORE_ME"] = "before"
         environment.pop("NEW_FROM_DOTENV", None)
@@ -193,6 +207,32 @@ class TestDotenvCLI:
                 str(unload_script),
             ],
             env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert completed.returncode == 0, completed.stderr
+
+    def test_multiline_dotenv_value_survives_generated_shell_script(self, runner, tmp_path):
+        (tmp_path / ".env").write_text('MULTILINE="first\\nsecond"\n')
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\n')
+        result = runner.invoke(cli, ["load", "--config", str(config_file)])
+        assert result.exit_code == 0
+        load_script = tmp_path / "load-multiline.sh"
+        load_script.write_text(result.stdout)
+
+        completed = subprocess.run(  # noqa: S603 - fixed executable and generated local fixture
+            [
+                "/bin/bash",
+                "-c",
+                'set -e; source "$1"; test "$MULTILINE" = "$2"',
+                "bash",
+                str(load_script),
+                "first\nsecond",
+            ],
+            env=os.environ.copy(),
             capture_output=True,
             text=True,
             check=False,
