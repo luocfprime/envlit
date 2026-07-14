@@ -32,7 +32,9 @@ An empty list is valid and loads nothing. Every entry must be a path string. Rel
 
 ## Parsing
 
-Envlit will add `python-dotenv` as a runtime dependency and use `dotenv_values()` to parse each file. It will not use `load_dotenv()` and will not mutate the Python process environment while parsing configuration.
+Envlit will add `python-dotenv` as a runtime dependency and use its parser to read each file. It will not use `load_dotenv()` and will not mutate the Python process environment while parsing configuration.
+
+Envlit will consume `dotenv.parser.parse_stream()` bindings so it can inspect the parser's per-binding `error` marker. It will first parse the entire file into bindings. If any binding has `error=True`, envlit rejects the whole file, reports the starting line numbers, and merges none of that file's successfully parsed bindings. This preserves the parsing behavior of `python-dotenv` while making malformed-file failure atomic; `dotenv_values()` alone cannot provide this guarantee because it logs malformed lines and returns partial results.
 
 Python-dotenv interpolation will be disabled. Parsed values such as `${HOME}/bin` will flow through envlit's existing value interpolation behavior, keeping dotenv and YAML values consistent.
 
@@ -40,7 +42,7 @@ Parsing results have these semantics:
 
 - `KEY=value` sets `KEY` to `value`.
 - `KEY=` sets `KEY` to the empty string.
-- A key without `=` is ignored with a warning.
+- A key without `=` produces a valid binding with a `None` value; envlit ignores it with a `ConfigDotenvWarning`.
 - Invalid environment variable names are rejected by envlit's existing validation before a load script is emitted.
 
 ## Merge and Inheritance Order
@@ -76,7 +78,9 @@ ConfigOverrideWarning: API_URL from ".env.local" overrides value from ".env"
 ConfigOverrideWarning: API_URL from "default.yaml:env" overrides value from ".env.local"
 ```
 
-Warnings never include old or new values because dotenv files commonly contain secrets. An override is still applied after its warning. Repeated declarations within a single dotenv file follow `python-dotenv` parsing behavior and are not separately diagnosed by envlit; the feature tracks precedence between configuration sources, not individual source lines.
+Source labels use resolved paths so files with the same basename remain distinguishable. Warnings never include old or new values because dotenv files commonly contain secrets. An override is still applied after its warning. Repeated declarations within a single dotenv file follow `python-dotenv` parsing behavior and are not separately diagnosed by envlit; the feature tracks precedence between configuration sources, not individual source lines.
+
+Non-fatal dotenv diagnostics, currently keys without `=`, use a separate `ConfigDotenvWarning` category. Both warning categories derive from `UserWarning`, allowing callers to filter them independently.
 
 ## Failure Behavior
 
@@ -85,7 +89,7 @@ A declared dotenv file is required. Envlit stops configuration loading and emits
 - does not exist;
 - is not a regular file;
 - cannot be read; or
-- cannot be parsed as dotenv content.
+- contains one or more bindings that `python-dotenv` marks as parser errors.
 
 An invalid `dotenv` YAML value, such as a mapping or a list containing a non-string, is also a configuration error. Errors identify the declaring YAML file and offending dotenv path where applicable.
 
