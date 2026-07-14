@@ -55,7 +55,7 @@ Also add explicit tests for:
 - invalid shapes (`dotenv: {}`, a non-string scalar, and a list containing a non-string) raising a contextual `ValueError` naming the declaring YAML;
 - missing paths and directory paths raising an error that names both the declaring YAML and resolved dotenv path;
 - unreadable files by monkeypatching `Path.open` for the target to raise `PermissionError`, again asserting both paths are named;
-- multiple malformed bindings reporting every starting line number and merging no partial data; and
+- multiple malformed bindings reporting the declaring YAML path, resolved dotenv path, and every starting line number while merging no partial data; and
 - invalid dotenv variable names flowing to existing script validation (the CLI/no-script assertion is in Task 3).
 
 - [ ] **Step 2: Verify RED**
@@ -81,7 +81,7 @@ class ConfigDotenvWarning(UserWarning):
     """A non-fatal dotenv entry was ignored."""
 ```
 
-Normalize `dotenv` to `list[str]`; accept an empty list and reject other types with the declaring YAML path in the error. Resolve paths against `config_file.parent`, require `is_file()`, and open as UTF-8. Wrap filesystem and decoding failures with an error naming both the declaring YAML and resolved dotenv path. Eagerly collect `dotenv.parser.parse_stream()` bindings and, if any binding has `error=True`, reject the whole file with all malformed starting line numbers before returning any entries. Convert successful non-`None` key/value bindings to an ordered per-file mapping without interpolation. Warn and ignore key-only bindings.
+Normalize `dotenv` to `list[str]`; accept an empty list and reject other types with the declaring YAML path in the error. Resolve paths against `config_file.parent`, require `is_file()`, and open as UTF-8. Wrap filesystem and decoding failures with an error naming both the declaring YAML and resolved dotenv path. Eagerly collect `dotenv.parser.parse_stream()` bindings and, if any binding has `error=True`, reject the whole file with the declaring YAML path, resolved dotenv path, and all malformed starting line numbers before returning any entries. Convert successful non-`None` key/value bindings to an ordered per-file mapping without interpolation. Warn and ignore key-only bindings.
 
 - [ ] **Step 5: Verify GREEN**
 
