@@ -47,7 +47,16 @@ def test_malformed_dotenv_fails_atomically(tmp_path):
         load_config(str(config_file))
 ```
 
-Also cover an absolute path, `${VAR}` preservation, `KEY=` as empty string, and `KEY` without `=` being ignored with `ConfigDotenvWarning`.
+Also add explicit tests for:
+
+- an absolute path and `${VAR}` preservation;
+- `KEY=` as an empty string and `KEY` without `=` being ignored with `ConfigDotenvWarning`;
+- `dotenv: []` loading nothing;
+- invalid shapes (`dotenv: {}`, a non-string scalar, and a list containing a non-string) raising a contextual `ValueError` naming the declaring YAML;
+- missing paths and directory paths raising an error that names both the declaring YAML and resolved dotenv path;
+- unreadable files by monkeypatching `Path.open` for the target to raise `PermissionError`, again asserting both paths are named;
+- multiple malformed bindings reporting every starting line number and merging no partial data; and
+- invalid dotenv variable names flowing to existing script validation (the CLI/no-script assertion is in Task 3).
 
 - [ ] **Step 2: Verify RED**
 
@@ -72,7 +81,7 @@ class ConfigDotenvWarning(UserWarning):
     """A non-fatal dotenv entry was ignored."""
 ```
 
-Normalize `dotenv` to `list[str]`; reject other types. Resolve paths against `config_file.parent`, require `is_file()`, open as UTF-8, eagerly collect `dotenv.parser.parse_stream()` bindings, and reject the whole file if any binding has `error=True`. Convert successful non-`None` key/value bindings to ordered entries without interpolation. Warn and ignore key-only bindings.
+Normalize `dotenv` to `list[str]`; accept an empty list and reject other types with the declaring YAML path in the error. Resolve paths against `config_file.parent`, require `is_file()`, and open as UTF-8. Wrap filesystem and decoding failures with an error naming both the declaring YAML and resolved dotenv path. Eagerly collect `dotenv.parser.parse_stream()` bindings and, if any binding has `error=True`, reject the whole file with all malformed starting line numbers before returning any entries. Convert successful non-`None` key/value bindings to an ordered per-file mapping without interpolation. Warn and ignore key-only bindings.
 
 - [ ] **Step 5: Verify GREEN**
 
@@ -102,7 +111,7 @@ first dotenv < later dotenv < current YAML env
 parent resolved env < child dotenv < child YAML env
 ```
 
-Assert each replacement emits one `ConfigOverrideWarning`, warning messages contain the variable and resolved old/new source paths, and messages do not contain either secret value. Assert profiles without `dotenv` retain existing env/flags/hooks behavior.
+Assert each cross-source replacement emits one `ConfigOverrideWarning`, warning messages contain the variable and resolved old/new source paths, and messages do not contain either secret value. Add a dotenv file containing the same key twice and assert its last value wins without any `ConfigOverrideWarning`. Assert profiles without `dotenv` retain existing env/flags/hooks behavior.
 
 - [ ] **Step 2: Verify RED**
 
@@ -112,7 +121,7 @@ Expected: new precedence/source-warning assertions FAIL.
 
 - [ ] **Step 3: Implement sourced ordered merge**
 
-Introduce a private sourced-value representation or parallel `dict[str, str]` source map. Refactor recursive loading so each YAML layer applies in this order:
+Introduce a private sourced-value representation or parallel `dict[str, str]` source map. Within each dotenv file, first collapse parser bindings into the file's final mapping without override warnings. Then merge that completed mapping as one source layer. Refactor recursive loading so each YAML layer applies in this order:
 
 ```python
 resolved_parent
@@ -150,6 +159,7 @@ Use `CliRunner(mix_stderr=False)` where supported, or Click's captured stderr AP
 - a successful override prints `ConfigOverrideWarning` to stderr;
 - stdout begins with the generated script and contains no warning;
 - a missing or malformed declared dotenv exits nonzero and stdout contains no generated shebang;
+- an invalid dotenv variable name exits nonzero and stdout contains no generated shebang;
 - a dotenv variable appears in the generated export command.
 
 Add an acceptance test that runs the generated load script in a bash subprocess with the project command entry points available, then runs restore and proves a pre-existing dotenv-loaded variable returns to its original value and a newly introduced variable is unset.
