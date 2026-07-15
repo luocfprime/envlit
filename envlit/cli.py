@@ -294,8 +294,22 @@ def unload(profile: str | None, config: str | None):
                 click.echo(generate_unload_script({}))
                 return
 
-        # Load configuration for hooks
-        config_dict = _load_config_for_cli(config_path)
+        # Loading hooks is best-effort during unload. State restoration must
+        # remain available even if the config or one of its dotenv files has
+        # changed since the environment was loaded.
+        try:
+            config_dict = _load_config_for_cli(config_path)
+        except Exception as e:
+            click.echo(
+                f"Warning: Could not load unload hooks from config: {e}",
+                err=True,
+            )
+            click.echo(
+                "Continuing with state restoration; unload hooks were skipped.",
+                err=True,
+            )
+            click.echo(generate_unload_script({}))
+            return
 
         # Generate unload script
         script = generate_unload_script(config_dict)

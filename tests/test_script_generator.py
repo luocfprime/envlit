@@ -308,6 +308,13 @@ class TestEscapeShellValue:
         result = escape_shell_value("line1\nline2")
         assert result == "line1\nline2"
 
+    def test_variable_placeholder_text_does_not_collide(self):
+        """User text resembling an internal placeholder remains unchanged."""
+        from envlit.script_generator import escape_shell_value
+
+        result = escape_shell_value("__ENVLIT_VAR_0__:$HOME")
+        assert result == "__ENVLIT_VAR_0__:$HOME"
+
     def test_preserve_simple_variable(self):
         """Test that simple $VAR references are preserved."""
         from envlit.script_generator import escape_shell_value

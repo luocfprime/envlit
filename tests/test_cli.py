@@ -3,12 +3,23 @@ Tests for CLI commands: find_config_file, load error paths, doctor.
 """
 
 import os
+import shutil
 import subprocess
 
 import pytest
 from click.testing import CliRunner
 
 from envlit.cli import cli, find_config_file
+
+
+@pytest.fixture
+def bash_executable():
+    """Return an available Bash executable, or skip shell integration tests."""
+    executable = shutil.which("bash")
+    if executable is None:
+        pytest.skip("Bash is not available on this platform")
+    return executable
+
 
 # ---------------------------------------------------------------------------
 # find_config_file
@@ -178,7 +189,7 @@ class TestDotenvCLI:
         assert "#!/bin/bash" not in result.stdout
         assert "BAD-NAME" in result.stderr
 
-    def test_dotenv_generated_script_loads_and_restores_environment(self, runner, tmp_path):
+    def test_dotenv_generated_script_loads_and_restores_environment(self, runner, tmp_path, bash_executable):
         (tmp_path / ".env").write_text("RESTORE_ME=loaded\nNEW_FROM_DOTENV=new\n")
         config_file = tmp_path / "default.yaml"
         config_file.write_text('dotenv: "./.env"\n')
@@ -197,7 +208,7 @@ class TestDotenvCLI:
 
         completed = subprocess.run(  # noqa: S603 - fixed executable and generated local fixtures
             [
-                "/bin/bash",
+                bash_executable,
                 "-c",
                 'set -e; source "$1"; '
                 'test "$RESTORE_ME" = loaded; test "$NEW_FROM_DOTENV" = new; '
@@ -214,7 +225,7 @@ class TestDotenvCLI:
 
         assert completed.returncode == 0, completed.stderr
 
-    def test_multiline_dotenv_value_survives_generated_shell_script(self, runner, tmp_path):
+    def test_multiline_dotenv_value_survives_generated_shell_script(self, runner, tmp_path, bash_executable):
         (tmp_path / ".env").write_text('MULTILINE="first\\nsecond"\n')
         config_file = tmp_path / "default.yaml"
         config_file.write_text('dotenv: "./.env"\n')
@@ -225,7 +236,7 @@ class TestDotenvCLI:
 
         completed = subprocess.run(  # noqa: S603 - fixed executable and generated local fixture
             [
-                "/bin/bash",
+                bash_executable,
                 "-c",
                 'set -e; source "$1"; test "$MULTILINE" = "$2"',
                 "bash",
@@ -233,6 +244,45 @@ class TestDotenvCLI:
                 "first\nsecond",
             ],
             env=os.environ.copy(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert completed.returncode == 0, completed.stderr
+
+    def test_unload_restores_state_when_declared_dotenv_disappears(self, runner, tmp_path, bash_executable):
+        dotenv_file = tmp_path / ".env"
+        dotenv_file.write_text("RESTORE_AFTER_DELETE=loaded\n")
+        config_file = tmp_path / "default.yaml"
+        config_file.write_text('dotenv: "./.env"\n')
+        load_result = runner.invoke(cli, ["load", "--config", str(config_file)])
+        assert load_result.exit_code == 0
+        dotenv_file.unlink()
+
+        unload_result = runner.invoke(cli, ["unload", "--config", str(config_file)])
+
+        assert unload_result.exit_code == 0
+        assert "envlit-internal-track restore" in unload_result.stdout
+        assert str(dotenv_file.resolve()) in unload_result.stderr
+        load_script = tmp_path / "load-before-delete.sh"
+        unload_script = tmp_path / "unload-after-delete.sh"
+        load_script.write_text(load_result.stdout)
+        unload_script.write_text(unload_result.stdout)
+        environment = os.environ.copy()
+        environment["RESTORE_AFTER_DELETE"] = "original"
+
+        completed = subprocess.run(  # noqa: S603 - executable is discovered and fixtures are local
+            [
+                bash_executable,
+                "-c",
+                'set -e; source "$1"; test "$RESTORE_AFTER_DELETE" = loaded; '
+                'source "$2"; test "$RESTORE_AFTER_DELETE" = original',
+                "bash",
+                str(load_script),
+                str(unload_script),
+            ],
+            env=environment,
             capture_output=True,
             text=True,
             check=False,

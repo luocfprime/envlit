@@ -287,7 +287,7 @@ class TestDotenvLoading:
         dotenv_file = tmp_path / "shared.env"
         dotenv_file.write_text("BIN=${HOME}/bin\n")
         config_file = tmp_path / "default.yaml"
-        config_file.write_text(f'dotenv: "{dotenv_file}"\n')
+        config_file.write_text(yaml.safe_dump({"dotenv": str(dotenv_file)}))
 
         config = load_config(str(config_file))
 
