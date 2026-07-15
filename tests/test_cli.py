@@ -238,10 +238,9 @@ class TestDotenvCLI:
             [
                 bash_executable,
                 "-c",
-                'set -e; source "$1"; test "$MULTILINE" = "$2"',
+                'set -e; source "$1"; test "$MULTILINE" = $\'first\\nsecond\'',
                 "bash",
                 str(load_script),
-                "first\nsecond",
             ],
             env=os.environ.copy(),
             capture_output=True,
