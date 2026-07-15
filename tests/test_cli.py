@@ -200,8 +200,8 @@ class TestDotenvCLI:
 
         load_script = tmp_path / "load.sh"
         unload_script = tmp_path / "unload.sh"
-        load_script.write_text(result.stdout)
-        unload_script.write_text(unload_result.stdout)
+        load_script.write_bytes(result.stdout.encode())
+        unload_script.write_bytes(unload_result.stdout.encode())
         environment = os.environ.copy()
         environment["RESTORE_ME"] = "before"
         environment.pop("NEW_FROM_DOTENV", None)
@@ -232,7 +232,7 @@ class TestDotenvCLI:
         result = runner.invoke(cli, ["load", "--config", str(config_file)])
         assert result.exit_code == 0
         load_script = tmp_path / "load-multiline.sh"
-        load_script.write_text(result.stdout)
+        load_script.write_bytes(result.stdout.encode())
 
         completed = subprocess.run(  # noqa: S603 - fixed executable and generated local fixture
             [
@@ -267,8 +267,8 @@ class TestDotenvCLI:
         assert str(dotenv_file.resolve()) in unload_result.stderr
         load_script = tmp_path / "load-before-delete.sh"
         unload_script = tmp_path / "unload-after-delete.sh"
-        load_script.write_text(load_result.stdout)
-        unload_script.write_text(unload_result.stdout)
+        load_script.write_bytes(load_result.stdout.encode())
+        unload_script.write_bytes(unload_result.stdout.encode())
         environment = os.environ.copy()
         environment["RESTORE_AFTER_DELETE"] = "original"
 

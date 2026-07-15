@@ -2,6 +2,7 @@
 Tests for configuration parsing and management.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -319,7 +320,7 @@ class TestDotenvLoading:
         config_file = tmp_path / "default.yaml"
         config_file.write_text(dotenv_yaml)
 
-        with pytest.raises(ValueError, match=str(config_file)):
+        with pytest.raises(ValueError, match=re.escape(str(config_file))):
             load_config(str(config_file))
 
     @pytest.mark.parametrize("kind", ["missing", "directory"])
