@@ -206,16 +206,6 @@ def _escape_interpolated(value: str) -> str:
     To include a literal $ alongside variable expansion, use interpolate: false
     for the whole value instead.
     """
-    # Step 1: Stash all $VAR / ${…} patterns so they survive escaping
-    var_refs: dict[str, str] = {}
-    var_counter = [0]
-
-    def replace_var(match: re.Match) -> str:
-        placeholder = f"__ENVLIT_VAR_{var_counter[0]}__"
-        var_refs[placeholder] = match.group(0)
-        var_counter[0] += 1
-        return placeholder
-
     # Matches $VAR and ${VAR} with optional modifiers (:-default, :0:5, /old/new, etc.)
     # and the ${#VAR} length operator. Does NOT support nested expansions like
     # ${VAR:-${OTHER}} — the inner } would terminate the match early.
@@ -223,23 +213,20 @@ def _escape_interpolated(value: str) -> str:
         r"\$([a-zA-Z_][a-zA-Z0-9_]*)"  # Simple $var
         r"|\${#?([a-zA-Z_][a-zA-Z0-9_]*)(?::?[^}]*)?}"  # ${var} or ${#var} with modifiers
     )
-    temp_value = VAR_PATTERN.sub(replace_var, value)
 
-    # Step 2: Escape characters that are special inside double quotes.
-    # Note: real newlines (\x0a) become the two-char sequence \n here, which bash
-    # does NOT interpret as a newline inside double quotes. Use interpolate: false
-    # (single-quote mode) if the value contains literal newlines.
-    temp_value = temp_value.replace("\\", "\\\\")
-    temp_value = temp_value.replace("$", "\\$")
-    temp_value = temp_value.replace("`", "\\`")
-    temp_value = temp_value.replace('"', '\\"')
-    temp_value = temp_value.replace("\n", "\\n")
+    def escape_literal_segment(segment: str) -> str:
+        # Literal newlines are valid inside a double-quoted shell assignment
+        # and must remain unchanged so multiline values round-trip exactly.
+        return segment.replace("\\", "\\\\").replace("$", "\\$").replace("`", "\\`").replace('"', '\\"')
 
-    # Step 3: Restore variable references verbatim
-    for placeholder, original in var_refs.items():
-        temp_value = temp_value.replace(placeholder, original)
-
-    return temp_value
+    escaped: list[str] = []
+    cursor = 0
+    for match in VAR_PATTERN.finditer(value):
+        escaped.append(escape_literal_segment(value[cursor : match.start()]))
+        escaped.append(match.group(0))
+        cursor = match.end()
+    escaped.append(escape_literal_segment(value[cursor:]))
+    return "".join(escaped)
 
 
 def _escape_literal(value: str) -> str:

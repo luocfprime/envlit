@@ -6,12 +6,13 @@ Provides shell script generation commands.
 import os
 import shutil
 import sys
+import warnings
 from pathlib import Path
 
 import click
 
 from envlit.__about__ import __version__
-from envlit.config import load_config
+from envlit.config import ConfigDotenvWarning, ConfigOverrideWarning, load_config
 from envlit.script_generator import generate_load_script, generate_unload_script
 
 
@@ -51,6 +52,25 @@ def find_config_file(profile: str | None = None, search_dir: Path | None = None)
             return config_path
 
     return None
+
+
+def _load_config_for_cli(config_path: Path) -> dict:
+    """Load config while routing user-facing config warnings to CLI stderr."""
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always", ConfigOverrideWarning)
+        warnings.simplefilter("always", ConfigDotenvWarning)
+        config = load_config(str(config_path))
+
+    for warning in captured:
+        rendered = warnings.formatwarning(
+            warning.message,
+            warning.category,
+            warning.filename,
+            warning.lineno,
+            warning.line,
+        )
+        click.echo(rendered.rstrip(), err=True)
+    return config
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -148,7 +168,7 @@ class DynamicFlagCommand(click.Command):
 
         if config_path and config_path.is_file():
             try:
-                config_dict = load_config(str(config_path))
+                config_dict = _load_config_for_cli(config_path)
 
                 ctx.ensure_object(dict)
                 ctx.obj["_preloaded_config"] = config_dict
@@ -203,7 +223,7 @@ def load(ctx: click.Context, profile: str | None, config: str | None, **kwargs):
             config_dict = preloaded["_preloaded_config"]
         else:
             try:
-                config_dict = load_config(str(config_path))
+                config_dict = _load_config_for_cli(config_path)
             except FileNotFoundError:
                 click.echo(f"Error: Config file not found: {config_path}", err=True)
                 sys.exit(1)
@@ -274,8 +294,22 @@ def unload(profile: str | None, config: str | None):
                 click.echo(generate_unload_script({}))
                 return
 
-        # Load configuration for hooks
-        config_dict = load_config(str(config_path))
+        # Loading hooks is best-effort during unload. State restoration must
+        # remain available even if the config or one of its dotenv files has
+        # changed since the environment was loaded.
+        try:
+            config_dict = _load_config_for_cli(config_path)
+        except Exception as e:
+            click.echo(
+                f"Warning: Could not load unload hooks from config: {e}",
+                err=True,
+            )
+            click.echo(
+                "Continuing with state restoration; unload hooks were skipped.",
+                err=True,
+            )
+            click.echo(generate_unload_script({}))
+            return
 
         # Generate unload script
         script = generate_unload_script(config_dict)

@@ -4,7 +4,6 @@ site_url: https://luocfprime.github.io/envlit
 site_description: A minimal CLI tool to organize, load, and switch between your project's environment contexts.
 site_author: Chaofan Luo
 edit_uri: edit/main/docs/
-project_name: luocfprime/envlit
 copyright: Maintained by <a href="https://github.com/luocfprime">luocfprime</a>.
 
 nav:

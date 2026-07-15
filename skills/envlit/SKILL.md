@@ -83,6 +83,11 @@ Config files live in a `.envlit/` directory in your project root.
 # Optional: inherit from another profile
 extends: "./base.yaml"
 
+# Optional: explicitly import required dotenv files, relative to this YAML file
+dotenv:
+  - "./.env"
+  - "./.env.local"
+
 # Environment variables
 env:
   # 1. String shorthand — equivalent to op: set
@@ -153,6 +158,8 @@ hooks:
     - name: "Confirm"
       script: "echo 'Environment restored'"
 ```
+
+**Dotenv precedence:** inherited values are loaded first, followed by dotenv files in list order, then the current profile's `env:` values. Cross-source replacements warn on stderr without exposing values. Envlit does not auto-discover dotenv files, and a declared file that is missing or malformed stops the load.
 
 **Hook execution order during load:**
 1. `pre_load` hooks run first (env vars NOT yet set — see pre-load state)

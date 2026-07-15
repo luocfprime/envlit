@@ -27,6 +27,8 @@ eval "$(envlit init)"
 Create a config file at `.envlit/default.yaml`:
 
 ```yaml
+dotenv: "./.env"
+
 env:
   PROJECT_MODE: "Development"
   DEBUG: "true"
@@ -58,6 +60,21 @@ eul                       # Unload: restores original DEBUG, keeps CUSTOM_VAR
 ```
 
 envlit only restores variables it managed, preserving your manual changes.
+
+### Dotenv Imports
+
+Explicitly import one or more dotenv files from a profile:
+
+```yaml
+dotenv:
+  - "./.env"
+  - "./.env.local"
+
+env:
+  DEBUG: "true"
+```
+
+Paths are resolved relative to the YAML file. Precedence is parent profile, dotenv files in list order, then the current YAML `env:` section. Every cross-source replacement prints a warning to stderr without printing either value. Declared files are required, and envlit does not auto-discover dotenv files.
 
 ### Dynamic Flags
 Define short CLI flags in YAML that map to long environment variable names and values. Reduces typing burden:
